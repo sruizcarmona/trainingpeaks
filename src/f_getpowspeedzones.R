@@ -232,13 +232,12 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   # get speed zones
   # filter out activities that we do not want
   # sport != NA !=2 and 0 (undefined, but probably cycling), speed.cor < 0.2, speed == NA
-  # sport only running (as some unknown == 0 might be altering the results)...
-  # --> no need in the end, new corr are negative if slope is negative so will be filtered out 
+  # sport only running (as some unknown == 0 might be altering the results, skiing)...
   hr_speed <- hr_vs_all[hr_vs_all$speed != "NaN" 
                         & hr_vs_all$speed != 0 
                         & !is.na(hr_vs_all$speed) 
                         & hr_vs_all$speed.cor > 0.2
-                        & hr_vs_all$sport != 2
+                        & hr_vs_all$sport == 1
                         & !is.na(hr_vs_all$sport),]
   if (dim(hr_speed)[1] != 0){
     speed.zones <- get.speed_zones(hr_speed,hrmax.athlete)
