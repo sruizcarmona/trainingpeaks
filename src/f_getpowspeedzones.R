@@ -107,7 +107,9 @@ get.hr_vs_all <- function(f,maxHR) {
   # check how speed and hr are correlated and store r2
   if (!is.na(sport) & !is.null(fitdata$record$speed) & !all(is.na(hva.act$speed))){
     lm_fit <- lm (speed ~ hr,data=hva.act)
-    hva.act$speed.cor <- round(summary(lm_fit)$r.squared,2)
+    # correction to avoid negatively correlated regressions (e.g. cycling that are not correctly labeled)
+    pos.neg.corr <- lm_fit$coefficients[2]/abs(lm_fit$coefficients[2])
+    hva.act$speed.cor <- round(summary(lm_fit)$r.squared*pos.neg.corr,2)
   } else {
     hva.act$speed.cor <- NA
   }
@@ -229,7 +231,9 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   }
   # get speed zones
   # filter out activities that we do not want
-  # sport != NA !=2, speed.cor < 0.2, speed == NA
+  # sport != NA !=2 and 0 (undefined, but probably cycling), speed.cor < 0.2, speed == NA
+  # sport only running (as some unknown == 0 might be altering the results)...
+  # --> no need in the end, new corr are negative if slope is negative so will be filtered out 
   hr_speed <- hr_vs_all[hr_vs_all$speed != "NaN" 
                         & hr_vs_all$speed != 0 
                         & !is.na(hr_vs_all$speed) 

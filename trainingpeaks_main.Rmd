@@ -77,7 +77,7 @@ sel.athletes <- c("LOICSEGAERT","RUBENAPERS","SANDERDEPESTEL","ARNEMARIT","AARON
                   "DAVIDRANDALL","WARDVANHOOF","ROBSCHEERLINCK","TRISTANGERRYN")
 # sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
 # sel.athletes <- c("RUBENAPERS")
-sel.athletes <- c("LOICSEGAERT")
+# sel.athletes <- c("LOICSEGAERT")
 
 # all folders in PRO_HEART
 all.dirs.PH <- list.dirs(list.dirs('PRO_HEART',recursive = F),recursive=F)
