@@ -306,7 +306,7 @@ ath.info
 
 
 ```{r}
-save(ath.info,tpeaks.all,all.activities,error.sessions,dup.sessions,file=
+save(ath.info, tp.newzones, tpeaks.all, all.activities, error.sessions, dup.sessions,file=
        paste0("rdas/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".rda"))
 ```
 
