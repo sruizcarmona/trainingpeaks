@@ -75,12 +75,19 @@ source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new 
 sel.athletes <- c("LOICSEGAERT","RUBENAPERS","SANDERDEPESTEL","ARNEMARIT","AARONVANPOUCKE",
                   "FERGUSSULLY","MATHEWROSS", "CYRUSMONK","BENTLEYOLDEN",
                   "DAVIDRANDALL","WARDVANHOOF","ROBSCHEERLINCK","TRISTANGERRYN")
+new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOLLI", "DRIESDESMET",
+                  "DYLANMCKENNA", "JASPERALBRECHT", "JASPERDEPROOST", "KIRSTYDEACON", "LAURASWANNET",
+                  "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
+                  "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
 # sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
 # sel.athletes <- c("RUBENAPERS")
 # sel.athletes <- c("LOICSEGAERT")
 
 # all folders in PRO_HEART
-all.dirs.PH <- list.dirs(list.dirs('PRO_HEART',recursive = F),recursive=F)
+ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
+ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
+# all.dirs.PH <- list.dirs(list.dirs('PRO_HEART',recursive = F),recursive=F)
+all.dirs.PH <- c(ph_folders1, ph_folders2)
 ```
 
 ### Load previous results
@@ -115,7 +122,7 @@ First of all, we will check if the athlete has already been processed
  writeLines(c("###############################",
                "##   TRAININGPEAKS PROJECT   ##",
                "###############################"))
-for (athlete in sel.athletes){
+for (athlete in sel.athletes[2]){
   writeLines(c("","###############################",
                "Calculating maxHR and HR/Power/Speed correlations...",
                paste0("Working with athlete ",athlete),""))

@@ -1,3 +1,9 @@
+# SRC CONFIDENTIAL DATA TPEAKS
+athlete_maxHR.txt
+*.rda
+*.png
+
+################################
 # History files
 .Rhistory
 .Rapp.history

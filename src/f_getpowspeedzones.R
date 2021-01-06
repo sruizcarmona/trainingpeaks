@@ -114,7 +114,7 @@ get.hr_vs_all <- function(f,maxHR) {
     hva.act$speed.cor <- NA
   }
   hva.act$sport <- sport
-  # hva.act$file <- f #debug
+  hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
 }
 
@@ -156,6 +156,54 @@ get.speed_zones <- function(data,hrmax) {
 }
 
 ############################################################################################################
+## GET MAXHR WITH TANGENT METHOD 
+## use tangent method with all maxhr for all activities to calculate the actual maxHR
+###
+## input 
+## output maxHR and plot saved in "png" folder
+############################################################################################################
+
+get.maxhr_tangent <- function(hr_vs_all,ath.code) {
+  maxhr_per_activity <- hr_vs_all %>%
+    rowwise() %>%
+    mutate(file=last(str_split(file,"/")[[1]])) %>%
+    ungroup() %>%
+    group_by(file) %>%
+    summarize(hrmax = max(hr))
+  
+  pdata = ggplot_build(ggplot(maxhr_per_activity) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
+  pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
+  # calc interc
+  yinterc <- pdata$y[which.min(pdata$deriv)] - pdata$x[which.min(pdata$deriv)]*min(pdata$deriv)
+  xinterc <- -yinterc/min(pdata$deriv)
+  error_act <- sum(maxhr_per_activity$hrmax > xinterc)
+  error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
+  # save plot
+  png(filename=paste0('png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
+  p <- ggplot(pdata,aes(x,y)) +
+    geom_line(cex=2) +
+    geom_abline(slope=min(pdata$deriv),intercept=yinterc,color="red",cex=1.5) +
+    geom_abline(slope=0,intercept=0) +
+    geom_vline(xintercept = xinterc,col='blue',cex=0.5,linetype="dashed") +
+    labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
+    annotate("text",cex=3,
+             label=paste0('maxHR=',round(xinterc,0)," bpm"),
+             x=min(pdata$x)+3,y=max(pdata$y),col='blue',hjust=0)  +
+    annotate("text", cex=3,
+             label=paste0('n > maxHR=',error_act," (",round(error_perc,1),"%)"),
+             x=min(pdata$x)+3,y=max(pdata$y)*0.95,col='blue',hjust=0) +
+    theme_minimal() +
+    theme(panel.grid.major.y = element_blank(),
+          panel.grid.minor.y = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          axis.text.y = element_blank())
+  plot(p)
+  dev.off()
+  hrmax <- round(xinterc,0)
+  return(hrmax)
+}
+
+############################################################################################################
 ## GET ATHLETE INFO WITH ZONES 
 ## wrapper function for all the above
 ## for each athlete, run the main function and the power/speed zone calculations
@@ -172,7 +220,8 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   
   hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
                      power.cor=character(), speed.cor=character(),sport=character(),
-                     # file=character(), #debug
+                     # maxhr=character(),
+                     file=character(), #debug
                      stringsAsFactors=FALSE) 
   cores <- detectCores()
   cl <- makeCluster(cores[1]-1)
@@ -192,13 +241,26 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   
   # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
   
-  # check maxHR
-  hrmax.athlete <- maxHR
+  #### CALCULATE MAX HR WITH TANGENT METHOD
+  ath.code <- ath.info$ath.id[ath.info$name == athlete]
+  hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
   ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
-  if (round(max(hr_vs_all$hr),0) > hrmax.athlete){
-    hrmax.athlete <- round(max(hr_vs_all$hr),0)
-    ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
-  }
+  
+  # remove activities with hr higher than updated maxHR
+  hr_vs_all <- hr_vs_all %>%
+    group_by(file) %>%
+    mutate(hrmax = max(hr)) %>% 
+    ungroup() %>% 
+    mutate(outlier = if_else(hrmax > hrmax.athlete,1,0)) %>% 
+    filter(outlier == 0)
+  
+  # check maxHR (NOT ANYMORE, TANGENT WORKS!)
+  # hrmax.athlete <- maxHR
+  # if (round(max(hr_vs_all$hr),0) > hrmax.athlete){
+  #   hrmax.athlete <- round(max(hr_vs_all$hr),0)
+  #   ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
+  # }
+  
   
   # get power zones
   # filter out activities that we do not want
