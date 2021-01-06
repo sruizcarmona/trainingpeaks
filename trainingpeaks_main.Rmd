@@ -80,7 +80,7 @@ new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOL
                   "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
                   "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
 # sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
-# sel.athletes <- c("RUBENAPERS")
+sel.athletes <- c("RUBENAPERS")
 # sel.athletes <- c("LOICSEGAERT")
 
 # all folders in PRO_HEART
@@ -93,8 +93,8 @@ all.dirs.PH <- c(ph_folders1, ph_folders2)
 ### Load previous results
 
 ```{r}
-if(file.exists('rdas/tpeaks_newzones.rda')){
-  load('rdas/tpeaks_newzones.rda')
+if(file.exists('out/rdas/tpeaks_newzones.rda')){
+  load('out/rdas/tpeaks_newzones.rda')
 }
 ```
 
@@ -162,7 +162,7 @@ for (athlete in sel.athletes){
   tp.newzones <- update.ath_info_with_newzones(tp.newzones, athlete, ath.maxHR)
 }
 # save everything in a file, so we don't need to calculate them every time
-save(tp.newzones,file='rdas/tpeaks_newzones.rda')
+save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
 tp.newzones
 ```
 
@@ -189,8 +189,13 @@ for (athlete in sel.athletes){
                "Processing all fit files...",
                paste0("Working with athlete ",athlete),""))
   
-  sel.dirs <- list.dirs(all.dirs.PH[str_detect(all.dirs.PH,athlete)],recursive=F)
-  sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
+  if (length(str_split(sel.dirs,"/")[[1]]) == 5){
+    sel.dirs <- list.dirs(sel.dirs)
+  } else {
+    sel.dirs <- list.dirs(sel.dirs,recursive=F)
+    sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  }
   files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
@@ -219,7 +224,7 @@ for (athlete in sel.athletes){
   rownames(tpeaks.all) <- NULL
 }
 # save everything in a file, so we don't need to calculate them every time
-save(tpeaks.all,file=paste0('rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
+save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
 ```
 
@@ -239,7 +244,7 @@ error.sessions <- tpeaks.all %>% filter(str_detect(date,"error")) %>% select(fil
 # check if file has already been processed in a different folder (some cases with full/monthly divisions)
 dup.sessions <- tpeaks.all %>%
   filter(!str_detect(date,"error")) %>% 
-  mutate(filename=sapply(str_split(file,"/"),function(x) x[5])) %>%
+  mutate(filename=sapply(str_split(file,"/"),function(x) x[8])) %>%
   group_by(ath.id,filename) %>%
   mutate(id=row_number(),source=first(file)) %>%
   ungroup() %>%
@@ -250,7 +255,7 @@ dup.sessions <- tpeaks.all %>%
 # update all.activities
 all.activities <- tpeaks.all %>%
   filter(!str_detect(date,"error")) %>% 
-  mutate(filename=sapply(str_split(file,"/"),function(x) x[5])) %>%
+  mutate(filename=sapply(str_split(file,"/"),function(x) x[8])) %>%
   group_by(ath.id,filename) %>%
   mutate(id=row_number(),source=first(file)) %>%
   ungroup() %>%
@@ -279,7 +284,12 @@ all.activities <- all.activities %>%
 populate ath.info
 
 ```{r}
-cohort_vs_athlete <- as.data.frame(t(do.call("cbind",str_split(str_remove(all.dirs.PH,"PRO_HEART/"),"/"))))
+cohort_vs_athlete <- as.data.frame(t(do.call("cbind",str_split(str_remove(all.dirs.PH,".*/PRO_HEART/"),"/"))),
+                                   stringsAsFactors = F)
+cohort_vs_athlete <- cohort_vs_athlete %>% 
+  mutate(V1 = ifelse(V1==V2,'P@H',V1)) %>% 
+  arrange(V1) %>% 
+  distinct(V2, .keep_all = T)
 ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>% select(name,ath.id,cohort=V1),
                   all.activities %>%
                     mutate(folder=tolower(sapply(str_split(file,"/"),function(x) x[4]))) %>%
@@ -317,7 +327,7 @@ ath.info
 
 ```{r}
 save(ath.info, tp.newzones, tpeaks.all, all.activities, error.sessions, dup.sessions,file=
-       paste0("rdas/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".rda"))
+       paste0("out/rdas/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".rda"))
 ```
 
 
@@ -364,9 +374,9 @@ Summarize power and add to ath.info
 ```{r}
 # load('trainingpeaks_data_PARALLEL_200701.rda')
 # 
-write.csv(tp.newzones,file=paste0("csv/tpeaks_summary_newzones_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
-write.csv(ath.info, file=paste0("csv/tpeaks_summary_athletes_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
-write.csv(all.activities, file=paste0("csv/tpeaks_summary_activities_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
-write.csv(error.sessions, file=paste0("csv/tpeaks_summary_error_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
-write.csv(dup.sessions, file=paste0("csv/tpeaks_summary_dups_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(tp.newzones,file=paste0("out/csv/tpeaks_summary_newzones_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(ath.info, file=paste0("out/csv/tpeaks_summary_athletes_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(all.activities, file=paste0("out/csv/tpeaks_summary_activities_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(error.sessions, file=paste0("out/csv/tpeaks_summary_error_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(dup.sessions, file=paste0("out/csv/tpeaks_summary_dups_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
 ```

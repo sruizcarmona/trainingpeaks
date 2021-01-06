@@ -165,9 +165,9 @@ get.speed_zones <- function(data,hrmax) {
 
 get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   maxhr_per_activity <- hr_vs_all %>%
-    rowwise() %>%
-    mutate(file=last(str_split(file,"/")[[1]])) %>%
-    ungroup() %>%
+    # rowwise() %>%
+    # mutate(file=last(str_split(file,"/")[[1]])) %>%
+    # ungroup() %>%
     group_by(file) %>%
     summarize(hrmax = max(hr))
   
@@ -179,7 +179,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   error_act <- sum(maxhr_per_activity$hrmax > xinterc)
   error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
   # save plot
-  png(filename=paste0('png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
+  png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
   p <- ggplot(pdata,aes(x,y)) +
     geom_line(cex=2) +
     geom_abline(slope=min(pdata$deriv),intercept=yinterc,color="red",cex=1.5) +

@@ -83,9 +83,9 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
     fd$heart_rate[fd$heart_rate == 0] <- NA
     # smooth hr
     # hr above maxHR reduce to maxHR as it has already been processed when getting the zones (heavier smooth)
-    smooth.hr <-smooth.data(fd$heart_rate,10)
+    smooth.hr <- smooth.data(fd$heart_rate,10)
     smooth.hr[smooth.hr=="NaN"] <- NA
-    smooth.hr[smooth.hr > ath.maxHR] <- ath.maxHR
+    # smooth.hr[smooth.hr > ath.maxHR] <- ath.maxHR
     # process all from smooth.hr
     a$hrmax.activity <- round(max(smooth.hr,na.rm=T),0)
     a$hrmax.perc <- round(a$hrmax.activity/a$hrmax_athlete*100,1)
@@ -249,6 +249,11 @@ process.fitfile <- function(file,ath.id) {
   # skip files with errors in processing activity
   if (class(act) == "try-error"){
     act.err <- onerow.df(c(ath.id,rep('activity error (unknown)',length(act.err.names)-2),file), act.err.names)
+    return(act.err)
+  }
+  # act hr higher than maxhr
+  if(!is.na(act$hrmax.activity) & act$hrmax.activity > act$hrmax_athlete) {
+    act.err <- onerow.df(c(ath.id,rep('activity error (maxHR too high)',length(act.err.names)-2),file),act.err.names)
     return(act.err)
   }
   # wrong year (in the future), hard to find an auto fix and only 1 or 2 examples
