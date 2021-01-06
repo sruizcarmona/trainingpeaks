@@ -214,15 +214,19 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
 ############################################################################################################
 
 update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
-  sel.dirs <- list.dirs(all.dirs.PH[str_detect(all.dirs.PH,athlete)],recursive=F)
-  sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
+  if (length(str_split(sel.dirs,"/")[[1]]) == 5){
+    sel.dirs <- list.dirs(sel.dirs)
+  } else {
+    sel.dirs <- list.dirs(sel.dirs,recursive=F)
+    sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  }
   files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
-  
   hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
-                     power.cor=character(), speed.cor=character(),sport=character(),
-                     # maxhr=character(),
-                     file=character(), #debug
-                     stringsAsFactors=FALSE) 
+                          power.cor=character(), speed.cor=character(),sport=character(),
+                          # maxhr=character(),
+                          file=character(), #debug
+                          stringsAsFactors=FALSE) 
   cores <- detectCores()
   cl <- makeCluster(cores[1]-1)
   registerDoParallel(cl)

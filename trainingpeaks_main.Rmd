@@ -122,7 +122,7 @@ First of all, we will check if the athlete has already been processed
  writeLines(c("###############################",
                "##   TRAININGPEAKS PROJECT   ##",
                "###############################"))
-for (athlete in sel.athletes[2]){
+for (athlete in sel.athletes){
   writeLines(c("","###############################",
                "Calculating maxHR and HR/Power/Speed correlations...",
                paste0("Working with athlete ",athlete),""))
@@ -147,14 +147,17 @@ for (athlete in sel.athletes[2]){
       next
     }
   }
+  ### SRC COMMENT NEXT SECTION AS TANGENT METHOD DOESNT NEED LAB MAXHR
+  ### SET IT TO 190 TO HAVE A MINIMUM TO SMOOTH TO REMOVE SPIKES
   # you should be here if the athlete has not been processed, with a new row in the table
   # we need to check now if there is a lab-measured maxHR
   # if not, we will use 180 as default (to smooth HR over that later)
-  if (exists('lab.maxHR')){
-    ath.maxHR <- if (athlete %in% lab.maxHR$name) {lab.maxHR$maxHR[lab.maxHR$name == athlete]} else {180}
-  } else {
-    ath.maxHR <- 180
-  }
+  # if (exists('lab.maxHR')){
+  #   ath.maxHR <- if (athlete %in% lab.maxHR$name) {lab.maxHR$maxHR[lab.maxHR$name == athlete]} else {180}
+  # } else {
+  #   ath.maxHR <- 180
+  # }
+  ath.maxHR <- 190
   # Finally, run the function to get the zones and update the tp.newzones table
   tp.newzones <- update.ath_info_with_newzones(tp.newzones, athlete, ath.maxHR)
 }
