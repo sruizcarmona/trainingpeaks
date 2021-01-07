@@ -169,7 +169,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     # mutate(file=last(str_split(file,"/")[[1]])) %>%
     # ungroup() %>%
     group_by(file) %>%
-    summarize(hrmax = max(hr))
+    summarise(hrmax = max(hr),.groups="drop")
   
   pdata = ggplot_build(ggplot(maxhr_per_activity) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
