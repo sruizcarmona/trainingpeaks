@@ -81,7 +81,7 @@ new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOL
                   "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
                   "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
 # sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
-sel.athletes <- c("RUBENAPERS")
+# sel.athletes <- c("RUBENAPERS")
 # sel.athletes <- c("LOICSEGAERT")
 
 # all folders in PRO_HEART
@@ -168,6 +168,11 @@ for (athlete in sel.athletes){
   if(exists("lab.goldVT") & any(lab.goldVT$ath.name == athlete)){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- lab.goldVT$gold.VT1[lab.goldVT$ath.name == athlete]
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- lab.goldVT$gold.VT2[lab.goldVT$ath.name == athlete]
+    # if any is 0, it means that there was an error on the calculations, so set NA for those athletes
+    if(any(tp.newzones[tp.newzones$name == athlete,c("gold.vt1","gold.vt2")] == 0)){
+      tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
+      tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
+    }
   } else {
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
