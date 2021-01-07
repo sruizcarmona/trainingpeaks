@@ -49,6 +49,7 @@ library(foreach)
 library(doParallel)
 library(zoo)
 library(splines)
+library(openxlsx)
 ```
 
 *** 
@@ -98,12 +99,15 @@ if(file.exists('out/rdas/tpeaks_newzones.rda')){
 }
 ```
 
-### Load test maxHR data
+### Load test maxHR data and lab goldVT values
 
 ```{r}
-if (file.exists('athlete_maxHR.txt')){
-  lab.maxHR <- read.table('athlete_maxHR.txt')
+if (file.exists('data/athlete_maxHR.txt')){
+  lab.maxHR <- read.table('data/athlete_maxHR.txt')
   colnames(lab.maxHR) <- c('name','maxHR')
+}
+if (file.exists('data/athlete_goldVT.csv')){
+  lab.goldVT <- read.csv('data/athlete_goldVT.csv')
 }
 ```
 
@@ -160,6 +164,14 @@ for (athlete in sel.athletes){
   ath.maxHR <- 190
   # Finally, run the function to get the zones and update the tp.newzones table
   tp.newzones <- update.ath_info_with_newzones(tp.newzones, athlete, ath.maxHR)
+  # also, add the new "goldVT" zones, to include in the calculation later
+  if(exists("lab.goldVT") & any(lab.goldVT$ath.name == athlete)){
+    tp.newzones$gold.vt1[tp.newzones$name == athlete] <- lab.goldVT$gold.VT1[lab.goldVT$ath.name == athlete]
+    tp.newzones$gold.vt2[tp.newzones$name == athlete] <- lab.goldVT$gold.VT2[lab.goldVT$ath.name == athlete]
+  } else {
+    tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
+    tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
+  }
 }
 # save everything in a file, so we don't need to calculate them every time
 save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
@@ -224,7 +236,7 @@ for (athlete in sel.athletes){
   rownames(tpeaks.all) <- NULL
 }
 # save everything in a file, so we don't need to calculate them every time
-save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
+# save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
 ```
 
@@ -240,11 +252,11 @@ split training.all into correct sessions, duplicate and error
 # levels(training.all$file) <- c(levels(training.all$file),"PRO_HEART/AUS_PH/BENTLEYOLDEN/FULL_2YEARS/kk.fit","PRO_HEART/AUS_PH/BENTLEYOLDEN/MONTH_2YEARS/2018-09-28-203213-ELEMNT 3AE9-91-0.fit")
 # training.all[8,]$file <- "PRO_HEART/AUS_PH/BENTLEYOLDEN/FULL_2YEARS/kk.fit"
 # training.all[7,]$file <- "PRO_HEART/AUS_PH/BENTLEYOLDEN/MONTH_2YEARS/2018-09-28-203213-ELEMNT 3AE9-91-0.fit"
-error.sessions <- tpeaks.all %>% filter(str_detect(date,"error")) %>% select(file,reason=date)
+error.sessions <- tpeaks.all %>% filter(str_detect(date,"error")) %>% select(ath.id,file,reason=date)
 # check if file has already been processed in a different folder (some cases with full/monthly divisions)
 dup.sessions <- tpeaks.all %>%
   filter(!str_detect(date,"error")) %>% 
-  mutate(filename=sapply(str_split(file,"/"),function(x) x[8])) %>%
+  mutate(filename=sapply(str_split(file,"/"),function(x) last(x))) %>%
   group_by(ath.id,filename) %>%
   mutate(id=row_number(),source=first(file)) %>%
   ungroup() %>%
@@ -255,7 +267,7 @@ dup.sessions <- tpeaks.all %>%
 # update all.activities
 all.activities <- tpeaks.all %>%
   filter(!str_detect(date,"error")) %>% 
-  mutate(filename=sapply(str_split(file,"/"),function(x) x[8])) %>%
+  mutate(filename=sapply(str_split(file,"/"),function(x) last(x))) %>%
   group_by(ath.id,filename) %>%
   mutate(id=row_number(),source=first(file)) %>%
   ungroup() %>%
@@ -306,7 +318,7 @@ ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>
                               n_heart=sum(!is.na(hr.avg)),n_power=sum(!is.na(power.avg)),
                               n_heart_power=sum(!is.na(power.avg) & !is.na(hrmax.activity))), by='ath.id', all=T) %>%
   mutate(perc_heart=round(n_heart/total_activities*100,2),perc_power = round(n_power/total_activities*100,2), perc_heart_power = round(n_heart_power/total_activities*100,2)) %>% 
-  arrange(cohort,ath.id)
+  arrange(ath.id)
 # add error and duplicate count
 for (i in ath.info$name) {
   ath.info[ath.info$name==i,'n_error'] <- sum(!is.na(str_extract(error.sessions$file,i)))
@@ -321,62 +333,37 @@ for (i in ath.info$ath.id) {
   }
 }
 
-ath.info
+#merge with newzones and nice order
+ath.full.info <- merge(ath.info,tp.newzones,by="ath.id") %>% 
+  select(-name.y,-starts_with("month"),-full_2years) %>% 
+  rename(name=name.x) %>% 
+  relocate(any_of(c("n_error","n_duplicates")),.after=total_activities) %>% 
+  relocate(perc_heart,.after=n_heart) %>% 
+  relocate(perc_power,.after=n_power)
+
+ath.full.info
 ```
 
 
 ```{r}
-save(ath.info, tp.newzones, tpeaks.all, all.activities, error.sessions, dup.sessions,file=
+save(ath.full.info, tp.newzones, tpeaks.all, all.activities, error.sessions, dup.sessions,file=
        paste0("out/rdas/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".rda"))
 ```
-
-
-
-* Number of Activities
-* Volume (Time)
-* Intensity
-  * %HRmax
-  * Thresholds (Time in T1/T2)
-  * Volume x %HRmax
-* Sessions per week
-* Average time
-* Average speed (cycling vs running, etc?)
-  * Event type = 1 == cycling??
-  * sport = 2?
-    * 2 = cycling
-    * 5 = swimming
-  * https://developer.garmin.com/downloads/connect-iq/monkey-c/doc/Toybox/ActivityRecording.html
-* Average HR
-* Heart beats per week/year of training
-* Average accumulated power
-* Data from TrainingPeaks? (data$session)
-  * Calories
-  * Total ascent
-  * max_power
-  * average_power / normalized_power
-  * total work
-  * training_stress_score
-  * total_distance
-  * intensity_factor
-  * avg_HR
-
-  * Average accumulated power (ATHLETE CALCULATION)
-* Heart beats per week/year of training (ATHLETE CALCULATION)
-* Data from TrainingPeaks? (data$session)
-  * Calories
-
-  * Thresholds (Time in Z5/Z4/Z3)
-https://blogs.sas.com/content/efs/2018/01/26/data-driven-fitness-vo2-max-lactate-threshold-heart-rate/
-
-
-Summarize power and add to ath.info
 
 ```{r}
 # load('trainingpeaks_data_PARALLEL_200701.rda')
 # 
-write.csv(tp.newzones,file=paste0("out/csv/tpeaks_summary_newzones_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
-write.csv(ath.info, file=paste0("out/csv/tpeaks_summary_athletes_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+# save CSV
+# write.csv(tp.newzones,file=paste0("out/csv/tpeaks_summary_newzones_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+write.csv(ath.full.info, file=paste0("out/csv/tpeaks_summary_athletes_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
 write.csv(all.activities, file=paste0("out/csv/tpeaks_summary_activities_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
 write.csv(error.sessions, file=paste0("out/csv/tpeaks_summary_error_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
 write.csv(dup.sessions, file=paste0("out/csv/tpeaks_summary_dups_",format(as.Date(Sys.Date()),format="%y%m%d"),".csv"))
+# save all in an XLSX file
+sheet_list <- list("athletes"= ath.full.info,
+                   "activities"=all.activities,
+                   "errors"=error.sessions,
+                   "duplicates"=dup.sessions)
+write.xlsx(sheet_list, keepNA=TRUE,
+           file=paste0("out/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
 ```

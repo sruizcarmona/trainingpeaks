@@ -4,6 +4,7 @@ athlete_goldVT.csv
 *.rda
 *.csv
 *.xlsx
+trainingpeaks_main.R
 
 ################################
 # History files
