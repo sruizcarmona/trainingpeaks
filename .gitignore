@@ -1,5 +1,6 @@
 # SRC CONFIDENTIAL DATA TPEAKS
 athlete_maxHR.txt
+athlete_goldVT.csv
 *.rda
 *.png
 *.csv
