@@ -2,8 +2,8 @@
 athlete_maxHR.txt
 athlete_goldVT.csv
 *.rda
-*.png
 *.csv
+*.xlsx
 
 ################################
 # History files
