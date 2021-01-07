@@ -2,6 +2,7 @@
 athlete_maxHR.txt
 *.rda
 *.png
+*.csv
 
 ################################
 # History files
