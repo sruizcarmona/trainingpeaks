@@ -117,16 +117,43 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
     a$vt.z1.time <- as.numeric(round(vt.zones.table['1']/100 * a$duration.min,1))
     a$vt.z2.time <- as.numeric(round(vt.zones.table['2']/100 * a$duration.min,1))
     a$vt.z3.time <- as.numeric(round(vt.zones.table['3']/100 * a$duration.min,1))
+    ############################# GOLD VT
+    # same with GOLD vt zones
+    goldvt.zones <- tp.newzones[tp.newzones$ath.id == ath.id,c(20:21)]
+    if (any(is.na(goldvt.zones))){
+      a <- cbind(a, onerow.df(NA,colnames=c("goldvt.z1","goldvt.z2","goldvt.z3",
+                                            "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time")))
+    } else {
+      fd$goldvt.zones <- findInterval(smooth.hr,goldvt.zones) + 1
+      goldvt.zones.table <- round(table(fd$goldvt.zones)/length(fd$goldvt.zones)*100,2)
+      goldvt.zones.table[c("1","2","3")[!c("1","2","3") %in% names(goldvt.zones.table)]] <- 0
+      a$goldvt.z1 <- as.numeric(vt.zones.table['1'])
+      a$goldvt.z2 <- as.numeric(vt.zones.table['2'])
+      a$goldvt.z3 <- as.numeric(vt.zones.table['3'])
+      a$goldvt.z1.time <- as.numeric(round(vt.zones.table['1']/100 * a$duration.min,1))
+      a$goldvt.z2.time <- as.numeric(round(vt.zones.table['2']/100 * a$duration.min,1))
+      a$goldvt.z3.time <- as.numeric(round(vt.zones.table['3']/100 * a$duration.min,1))
+    }
+    ############################# END GOLD VT
     # calculate trimp scores
     a$etrimp <- round(a$hr.z1.time * 1 + a$hr.z2.time * 2 + a$hr.z3.time * 3 + a$hr.z4.time * 4 + a$hr.z5.time * 5,2)
     a$lutrimp <- round(a$vt.z1.time * 1 + a$vt.z2.time * 2 + a$vt.z3.time * 3,2)
+    # trimp goldvt
+    if (any(is.na(goldvt.zones))){
+      a$lutrimp.goldvt <- NA
+    } else {
+      a$lutrimp.goldvt <- round(a$goldvt.z1.time * 1 + a$goldvt.z2.time * 2 + a$goldvt.z3.time * 3,2)
+    }
   } else {
     # add same columns with NA
     a <- cbind(a, onerow.df(NA,colnames=c("hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
                                           "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
                                           "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
                                           "vt.z1","vt.z2","vt.z3","vt.z1.time","vt.z2.time","vt.z3.time",
-                                          "lutrimp","etrimp")))
+                                          "goldvt.z1","goldvt.z2","goldvt.z3",
+                                          "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time",
+                                          "etrimp","lutrimp",
+                                          "lutrimp.goldvt")))
   }
   ###################
   # get info from power
@@ -147,7 +174,7 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
     pow.z5.time <- as.numeric(round(pow.zones.summary['5']/100 * a$duration.min,1))
     # same with vt zones
     pow.vt.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(10:11)]
-    pow.vt.zones <- findInterval(smooth.pow,pow.vt.zones.table)
+    pow.vt.zones <- findInterval(smooth.pow,pow.vt.zones.table) + 1 # add one to correct, as zone 0 should be 1, etc
     pow.vt.zones.summary <- round(table(pow.vt.zones)/length(pow.vt.zones)*100,2)
     pow.vt.zones.summary[c("1","2","3")[!c("1","2","3") %in% names(pow.vt.zones.summary)]] <- 0
     pow.vt.z1.time <- as.numeric(round(pow.vt.zones.summary['1']/100 * a$duration.min,1))
@@ -183,7 +210,7 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
       speed.z5.time <- as.numeric(round(speed.zones.summary['5']/100 * a$duration.min,1))
       # same with vt zones
       speed.vt.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(18:19)]
-      speed.vt.zones <- findInterval(smooth.speed,speed.vt.zones.table)
+      speed.vt.zones <- findInterval(smooth.speed,speed.vt.zones.table) + 1
       speed.vt.zones.summary <- round(table(speed.vt.zones)/length(speed.vt.zones)*100,2)
       speed.vt.zones.summary[c("1","2","3")[!c("1","2","3") %in% names(speed.vt.zones.summary)]] <- 0
       speed.vt.z1.time <- as.numeric(round(speed.vt.zones.summary['1']/100 * a$duration.min,1))

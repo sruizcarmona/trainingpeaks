@@ -1,4 +1,8 @@
 
+library(XML)
+library(geosphere)
+
+
 readGPX <- function(
     gpx.file,
     metadata = TRUE,

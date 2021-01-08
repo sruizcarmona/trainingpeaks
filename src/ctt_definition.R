@@ -29,6 +29,9 @@ act.err.names <- c("ath.id","date","year","month","week","start_time","duration.
                    "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
                    "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
                    "vt.z1","vt.z2","vt.z3","vt.z1.time","vt.z2.time","vt.z3.time",
-                   "etrimp","lutrimp","etrimp.power","lutrimp.power","etrimp.speed","lutrimp.speed",
+                   "goldvt.z1","goldvt.z2","goldvt.z3",
+                   "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time",
+                   "etrimp","lutrimp","lutrimp.goldvt",
+                   "etrimp.power","lutrimp.power","etrimp.speed","lutrimp.speed",
                    "speed.avg","speed.max","sport_code","sport_type","cal","power.max","power.avg","power.norm",
                    "work","stress.score","intensity.factor","training.effect","file")
