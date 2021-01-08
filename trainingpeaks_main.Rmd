@@ -169,7 +169,8 @@ for (athlete in sel.athletes){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- lab.goldVT$gold.VT1[lab.goldVT$ath.name == athlete]
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- lab.goldVT$gold.VT2[lab.goldVT$ath.name == athlete]
     # if any is 0, it means that there was an error on the calculations, so set NA for those athletes
-    if(any(tp.newzones[tp.newzones$name == athlete,c("gold.vt1","gold.vt2")] == 0)){
+    if(any(tp.newzones[tp.newzones$name == athlete,c("gold.vt1","gold.vt2")] == 0) |
+       tp.newzones[tp.newzones$name == athlete,]$gold.vt1 > tp.newzones[tp.newzones$name == athlete,]$gold.vt2) {
       tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
       tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
     }
