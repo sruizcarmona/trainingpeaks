@@ -164,6 +164,9 @@ get.speed_zones <- function(data,hrmax) {
 ############################################################################################################
 
 get.maxhr_tangent <- function(hr_vs_all,ath.code) {
+  if (is.null(hr_vs_all)){
+    return (0)
+  }
   maxhr_per_activity <- hr_vs_all %>%
     # rowwise() %>%
     # mutate(file=last(str_split(file,"/")[[1]])) %>%
@@ -249,6 +252,12 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   ath.code <- ath.info$ath.id[ath.info$name == athlete]
   hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
   ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
+  
+  # check if hr_vs_all contains any rows, otherwise don't do anything below these lines and return ath.info.
+  # NO HR DATA
+  if (is.null(hr_vs_all)){
+    return(ath.info)
+  }
   
   # remove activities with hr higher than updated maxHR
   hr_vs_all <- hr_vs_all %>%
