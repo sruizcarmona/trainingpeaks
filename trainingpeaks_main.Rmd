@@ -50,6 +50,9 @@ library(doParallel)
 library(zoo)
 library(splines)
 library(openxlsx)
+library(geosphere)
+library(XML)
+library(tidyr)
 ```
 
 *** 
@@ -81,15 +84,11 @@ new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOL
                   "DYLANMCKENNA", "JASPERALBRECHT", "JASPERDEPROOST", "KIRSTYDEACON", "LAURASWANNET",
                   "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
                   "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
-# sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
-# sel.athletes <- c("RUBENAPERS")
-# sel.athletes <- c("LOICSEGAERT")
-sel.athletes <- c("ROBSCHEERLINCK")
+sel.athletes <- c(sel.athletes,new.athletes)
 
-# all folders in PRO_HEART
+# all folders in PRO_HEART, where sel.athletes folders are located
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
-# all.dirs.PH <- list.dirs(list.dirs('PRO_HEART',recursive = F),recursive=F)
 all.dirs.PH <- c(ph_folders1, ph_folders2)
 ```
 
@@ -232,9 +231,9 @@ for (athlete in sel.athletes){
   tp.athlete <- NULL
   tp.athlete <- foreach (file=files, .combine=rbind,
                          # .export=c("get.act_info_from_fitdata","smooth.data","onerow.df","get.date_GARMIN"),
-                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines")) %dopar% {
+                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines","geosphere","XML","tidyr")) %dopar% {
     temp.tp.athlete <- process.fitfile(file, ath.id)
-    temp.tp.athleteq
+    temp.tp.athlete
   }
   end <- Sys.time()
   duration <- end-start

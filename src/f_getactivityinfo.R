@@ -127,12 +127,12 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
       fd$goldvt.zones <- findInterval(smooth.hr,goldvt.zones) + 1
       goldvt.zones.table <- round(table(fd$goldvt.zones)/length(fd$goldvt.zones)*100,2)
       goldvt.zones.table[c("1","2","3")[!c("1","2","3") %in% names(goldvt.zones.table)]] <- 0
-      a$goldvt.z1 <- as.numeric(vt.zones.table['1'])
-      a$goldvt.z2 <- as.numeric(vt.zones.table['2'])
-      a$goldvt.z3 <- as.numeric(vt.zones.table['3'])
-      a$goldvt.z1.time <- as.numeric(round(vt.zones.table['1']/100 * a$duration.min,1))
-      a$goldvt.z2.time <- as.numeric(round(vt.zones.table['2']/100 * a$duration.min,1))
-      a$goldvt.z3.time <- as.numeric(round(vt.zones.table['3']/100 * a$duration.min,1))
+      a$goldvt.z1 <- as.numeric(goldvt.zones.table['1'])
+      a$goldvt.z2 <- as.numeric(goldvt.zones.table['2'])
+      a$goldvt.z3 <- as.numeric(goldvt.zones.table['3'])
+      a$goldvt.z1.time <- as.numeric(round(goldvt.zones.table['1']/100 * a$duration.min,1))
+      a$goldvt.z2.time <- as.numeric(round(goldvt.zones.table['2']/100 * a$duration.min,1))
+      a$goldvt.z3.time <- as.numeric(round(goldvt.zones.table['3']/100 * a$duration.min,1))
     }
     ############################# END GOLD VT
     # calculate trimp scores
