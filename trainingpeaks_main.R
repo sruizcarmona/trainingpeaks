@@ -14,6 +14,7 @@ library(openxlsx)
 source('src/ctt_definition.R') # constant variables and files
 source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
+source('src/f_getgpxactivity.R') # functions for reading gpx files
 
 
 ## -----------------------------------------------------------------------------
@@ -27,6 +28,7 @@ new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOL
 # sel.athletes <- c("RUBENAPERS","BENTLEYOLDEN")
 # sel.athletes <- c("RUBENAPERS")
 # sel.athletes <- c("LOICSEGAERT")
+sel.athletes <- c("ROBSCHEERLINCK")
 
 # all folders in PRO_HEART
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
@@ -99,7 +101,8 @@ for (athlete in sel.athletes){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- lab.goldVT$gold.VT1[lab.goldVT$ath.name == athlete]
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- lab.goldVT$gold.VT2[lab.goldVT$ath.name == athlete]
     # if any is 0, it means that there was an error on the calculations, so set NA for those athletes
-    if(any(tp.newzones[tp.newzones$name == athlete,c("gold.vt1","gold.vt2")] == 0)){
+    if(any(tp.newzones[tp.newzones$name == athlete,c("gold.vt1","gold.vt2")] == 0) |
+       tp.newzones[tp.newzones$name == athlete,]$gold.vt1 > tp.newzones[tp.newzones$name == athlete,]$gold.vt2) {
       tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
       tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
     }
@@ -127,7 +130,7 @@ for (athlete in sel.athletes){
     sel.dirs <- list.dirs(sel.dirs,recursive=F)
     sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
   }
-  files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
+  files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
@@ -145,7 +148,7 @@ for (athlete in sel.athletes){
                          # .export=c("get.act_info_from_fitdata","smooth.data","onerow.df","get.date_GARMIN"),
                          .packages=c("dplyr", "fit", "stringr", "zoo", "splines")) %dopar% {
     temp.tp.athlete <- process.fitfile(file, ath.id)
-    temp.tp.athlete
+    temp.tp.athleteq
   }
   end <- Sys.time()
   duration <- end-start

@@ -252,8 +252,17 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
 ############################################################################################################
 
 process.fitfile <- function(file,ath.id) {
-  # read fit file
-  fitdata <- try(read.fit(file),silent=T)
+  # read file
+  # directly if .fit, or create fitdata first, if .gpx
+  if (str_detect(file,".gpx")){
+    fitdata <- try(create.fitdata_from_gpx(file),silent=T) 
+    if (class(fitdata) == "try-error"){
+      act.err <- onerow.df(c(ath.id,rep('file error (gpx format)',length(act.err.names)-2),file), act.err.names)
+      return(act.err)
+    }
+  } else {
+    fitdata <- try(read.fit(file),silent=T)
+  }
   ###################
   # check errors in file or before processing the activity
   # skip files with errors

@@ -163,12 +163,12 @@ create.fitdata_from_gpx <- function(gpxfile) {
   gpxdata.raw <- readGPX(gpxfile)
   gpxdata <- gpxdata.raw$tracks[[1]][[1]]
   # manipulate gpxdata to create needed fields, as in fitdata$record
-  record <- gpxdata %>%
+  gpx <- gpxdata %>%
     plyr::rename(replace=c(ele="altitude",
                            extensions="heart_rate"),
                  warn_missing=FALSE) %>% 
-    mutate(heart_rate = as.numeric(heart_rate),
-           altitude = as.numeric(altitude),
+    mutate_at(if('heart_rate' %in% names(.)) 'heart_rate' else integer(0), as.numeric) %>% 
+    mutate(altitude = as.numeric(altitude),
            ascent = altitude-lag(altitude),
            ascent = cumsum(replace_na((ascent+abs(ascent))/2,0)),
            # date=format(as.POSIXct(time,format=dateformat,tz="UTC")),
@@ -205,9 +205,9 @@ create.fitdata_from_gpx <- function(gpxfile) {
   # combine both into fitdata
   fitdata <- NULL
   fitdata$session <- session
-  fitdata$record <- record
-  fitdata
-  return(fit)
+  fitdata$record <- gpx
+  # fitdata
+  return(fitdata)
 }
 ############################################################################################################
 ############################################################################################################
