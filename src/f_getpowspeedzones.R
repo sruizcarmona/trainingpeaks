@@ -15,6 +15,7 @@ library(foreach)
 library(doParallel)
 library(zoo)
 library(splines)
+library(ggplot2)
 
 ############################################################################################################
 ## MAIN FUNCTION 
@@ -30,7 +31,13 @@ get.hr_vs_all <- function(f,maxHR) {
   # discard if its shorter than a minute
   if (is.null(dim(fitdata$record)) || dim(fitdata$record)[1] < 60) {return(NULL)}
   # save sport (to filter later)
-  sport <- if (!is.null(fitdata$session$sport)){fitdata$session$sport}else{fitdata$sport$sport}
+  if (!is.null(fitdata$session$sport)){
+    sport <- fitdata$session$sport
+  } else if (!is.null(fitdata$sport$sport)){
+    sport <- fitdata$sport$sport
+  } else {
+    sport <- 0
+  }
   # if heart rate is not present, skip file as there is no use
   if (!'heart_rate' %in% names(fitdata$record)){
     return(NULL)
@@ -177,17 +184,27 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   pdata = ggplot_build(ggplot(maxhr_per_activity) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
   # calc interc
-  yinterc <- pdata$y[which.min(pdata$deriv)] - pdata$x[which.min(pdata$deriv)]*min(pdata$deriv)
-  xinterc <- -yinterc/min(pdata$deriv)
-  error_act <- sum(maxhr_per_activity$hrmax > xinterc)
-  error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
+  # make it higher than 180, to remove artifacts (BA_023)
+  xinterc <- 0
+  error_perc <- 999
+  min.ordered <- order(pdata$deriv)
+  min.o.i <- 0
+  while (xinterc < 180 | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
+    min.o.i <- min.o.i + 1
+    yinterc <- pdata$y[min.ordered[min.o.i]] - pdata$x[min.ordered[min.o.i]]*pdata$deriv[min.ordered[min.o.i]]
+    xinterc <- -yinterc/pdata$deriv[min.ordered[min.o.i]]
+    error_act <- sum(maxhr_per_activity$hrmax > xinterc)
+    error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
+  }
+  
   # save plot
   png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
   p <- ggplot(pdata,aes(x,y)) +
     geom_line(cex=2) +
-    geom_abline(slope=min(pdata$deriv),intercept=yinterc,color="red",cex=1.5) +
+    geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=1.5) +
     geom_abline(slope=0,intercept=0) +
     geom_vline(xintercept = xinterc,col='blue',cex=0.5,linetype="dashed") +
+    ylim(0,NA) +
     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
     annotate("text",cex=3,
              label=paste0('maxHR=',round(xinterc,0)," bpm"),
