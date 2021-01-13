@@ -21,19 +21,15 @@ source('src/f_getgpxactivity.R') # functions for reading gpx files
 
 
 ## -----------------------------------------------------------------------------
-sel.athletes <- c("LOICSEGAERT","RUBENAPERS","SANDERDEPESTEL","ARNEMARIT","AARONVANPOUCKE",
-                  "FERGUSSULLY","MATHEWROSS", "CYRUSMONK","BENTLEYOLDEN",
-                  "DAVIDRANDALL","WARDVANHOOF","ROBSCHEERLINCK","TRISTANGERRYN")
-new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOLLI", "DRIESDESMET",
-                  "DYLANMCKENNA", "JASPERALBRECHT", "JASPERDEPROOST", "KIRSTYDEACON", "LAURASWANNET",
-                  "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
-                  "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
-sel.athletes <- c(sel.athletes,new.athletes)
+# DECLARE NAME OF ATHLETES TO ANALYZE
+# sel.athletes <- c("NAME")
+sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
 
 # all folders in PRO_HEART, where sel.athletes folders are located
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
-all.dirs.PH <- c(ph_folders1, ph_folders2)
+ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
+all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3)
 
 
 ## -----------------------------------------------------------------------------
@@ -117,6 +113,14 @@ tp.newzones
 
 ## -----------------------------------------------------------------------------
 tpeaks.all <- NULL
+###################
+# initialize cluster
+###################
+# set up number of cores
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1) #not to overload your computer
+registerDoParallel(cl)
+
 for (athlete in sel.athletes){
   writeLines(c("","###############################",
                "Processing all fit files...",
@@ -133,13 +137,6 @@ for (athlete in sel.athletes){
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
-  ###################
-  # initialize cluster
-  ###################
-  # set up number of cores
-  cores <- detectCores()
-  cl <- makeCluster(cores[1]-1) #not to overload your computer
-  registerDoParallel(cl)
   start <- Sys.time()
 
   tp.athlete <- NULL
@@ -152,10 +149,12 @@ for (athlete in sel.athletes){
   end <- Sys.time()
   duration <- end-start
   print(duration)
-  stopCluster(cl)
   tpeaks.all <- rbind(tpeaks.all,tp.athlete)
   rownames(tpeaks.all) <- NULL
 }
+# stop cluster
+stopCluster(cl)
+
 # save everything in a file, so we don't need to calculate them every time
 # save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
@@ -207,12 +206,17 @@ all.activities <- all.activities %>%
 
 
 ## -----------------------------------------------------------------------------
-cohort_vs_athlete <- as.data.frame(t(do.call("cbind",str_split(str_remove(all.dirs.PH,".*/PRO_HEART/"),"/"))),
-                                   stringsAsFactors = F)
+# cohort_vs_athlete <- as.data.frame(t(do.call("cbind",str_split(str_remove(all.dirs.PH,".*TRAININGPEAKS/"),"/"))),
+                                   # stringsAsFactors = F)
+cohort_vs_athlete <- str_split(str_remove(all.dirs.PH,".*TRAININGPEAKS/"),"/")
+cohort_vs_athlete <- as.data.frame(t(do.call("cbind",
+                                             lapply(cohort_vs_athlete,function(x){x[(length(x)-1):length(x)]}))))
 cohort_vs_athlete <- cohort_vs_athlete %>% 
-  mutate(V1 = ifelse(V1==V2,'P@H',V1)) %>% 
+  filter(V2 != "rawzip") %>% 
+  # mutate(V1 = ifelse(V1==V2,'P@H',V1)) %>% 
   arrange(V1) %>% 
   distinct(V2, .keep_all = T)
+
 ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>% select(name,ath.id,cohort=V1),
                   all.activities %>%
                     mutate(folder=tolower(sapply(str_split(file,"/"),function(x) x[4]))) %>%
