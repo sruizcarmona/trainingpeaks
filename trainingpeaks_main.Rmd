@@ -105,6 +105,8 @@ if (file.exists('data/athlete_maxHR.txt')){
 }
 if (file.exists('data/athlete_goldVT.csv')){
   lab.goldVT <- read.csv('data/athlete_goldVT.csv')
+  lab.goldVT$gold.VT1 <- round(lab.goldVT$gold.VT1,2)
+  lab.goldVT$gold.VT2 <- round(lab.goldVT$gold.VT2,2)
 }
 ```
 
