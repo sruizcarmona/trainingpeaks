@@ -77,14 +77,9 @@ source('src/f_getgpxactivity.R') # functions for reading gpx files
 ### Select athletes and directory
 
 ```{r}
-sel.athletes <- c("LOICSEGAERT","RUBENAPERS","SANDERDEPESTEL","ARNEMARIT","AARONVANPOUCKE",
-                  "FERGUSSULLY","MATHEWROSS", "CYRUSMONK","BENTLEYOLDEN",
-                  "DAVIDRANDALL","WARDVANHOOF","ROBSCHEERLINCK","TRISTANGERRYN")
-new.athletes <- c("BRYNLONERAGAN", "CHARLESHIAM", "DANIELTAYLOR", "DOMENICPAOLOLLI", "DRIESDESMET",
-                  "DYLANMCKENNA", "JASPERALBRECHT", "JASPERDEPROOST", "KIRSTYDEACON", "LAURASWANNET",
-                  "PATRICKBURT", "PIPERALBRECHT", "RACHELKNELLWOLF", "SIMONEBRICK", "STANVANWALLEGHEM",
-                  "STEFFVANGENECHTEN", "TIMCUTLER", "TOMHOLLAND", "TORSTENDEMEYERE", "WILLIAMOCKENDEN")
-sel.athletes <- c(sel.athletes,new.athletes)
+# DECLARE NAME OF ATHLETES TO ANALYZE
+# sel.athletes <- c("NAME")
+sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
 
 # all folders in PRO_HEART, where sel.athletes folders are located
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
