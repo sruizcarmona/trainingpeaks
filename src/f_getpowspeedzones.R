@@ -189,7 +189,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   error_perc <- 999
   min.ordered <- order(pdata$deriv)
   min.o.i <- 0
-  while (xinterc < 180 | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
+  while ((xinterc < 180 & error_perc > 1) | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
     min.o.i <- min.o.i + 1
     yinterc <- pdata$y[min.ordered[min.o.i]] - pdata$x[min.ordered[min.o.i]]*pdata$deriv[min.ordered[min.o.i]]
     xinterc <- -yinterc/pdata$deriv[min.ordered[min.o.i]]
