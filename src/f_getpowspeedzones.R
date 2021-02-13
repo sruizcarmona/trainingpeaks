@@ -16,6 +16,7 @@ library(doParallel)
 library(zoo)
 library(splines)
 library(ggplot2)
+library(scales)
 
 ############################################################################################################
 ## MAIN FUNCTION 
@@ -94,13 +95,13 @@ get.hr_vs_all <- function(f,maxHR) {
   if (dim(hva.act)[1] == 0){
     return(NULL)
   }
-  # check if max hr is higher than 10% maxHR for that athlete
+  # check if max hr is higher than 5% maxHR for that athlete
   # if so, smooth a bit more to discard outliers
-  if (max(hva.act$hr,na.rm=T) > maxHR*1.1){
+  if (max(hva.act$hr,na.rm=T) > maxHR*1.05){
     index.max <- which.max(hva.act$hr)
     i.start <- max(1,(index.max-100))
     i.stop <-min(length(hva.act$hr),(index.max+100))
-    hva.act$hr[i.start:i.stop] <- smooth.data(hva.act$hr[i.start:i.stop],200)
+    hva.act$hr[i.start:i.stop] <- smooth.data(hva.act$hr[i.start:i.stop],50)
   }
   # check how pow and hr are correlated and store r2 to filter later
   if (!is.na(sport) & !is.null(fitdata$record$power) & !all(is.na(hva.act$power))){
@@ -180,8 +181,10 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     # ungroup() %>%
     group_by(file) %>%
     summarise(hrmax = max(hr),.groups="drop")
-  
-  pdata = ggplot_build(ggplot(maxhr_per_activity) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
+  maxhr_per_activity.140 <- maxhr_per_activity %>% 
+    filter(hrmax > 140) # 11FEB meeting addition
+
+  pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
   # calc interc
   # make it higher than 180, to remove artifacts (BA_023)
@@ -189,29 +192,50 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   error_perc <- 999
   min.ordered <- order(pdata$deriv)
   min.o.i <- 0
-  while ((xinterc < 180 & error_perc > 1) | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
+  # SRC COMMENT FILTERING, JUST LET IT WORK
+  # while ((xinterc < 180 & error_perc > 1) | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
     min.o.i <- min.o.i + 1
     yinterc <- pdata$y[min.ordered[min.o.i]] - pdata$x[min.ordered[min.o.i]]*pdata$deriv[min.ordered[min.o.i]]
-    xinterc <- -yinterc/pdata$deriv[min.ordered[min.o.i]]
+    xinterc <- round(-yinterc/pdata$deriv[min.ordered[min.o.i]],0)
     error_act <- sum(maxhr_per_activity$hrmax > xinterc)
     error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
-  }
+  # }
+  # # ### NEW ADDITION AFTER MEETING 11 FEB
+  # # calculate where deriv crosses 0
+  # dzeros <- NULL
+  # for (i in seq_along(pdata$deriv)) {dzeros <- c(dzeros,pdata$deriv[i]*pdata$deriv[i-1])}
+  # # remove last bump if its after the minimum tangent and it goes to 0
+  # sec.last.index <- which(dzeros < 0)[length(which(dzeros < 0))-1]
+  # if (length(sec.last.index) > 0 && sec.last.index > min.ordered[min.o.i]){
+  #   pdata$y[sec.last.index:length(pdata$y)] <- NA
+  # }
+  # # recalc deriv, so the last hump is explicitly ignored
+  # # pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
+  # ###############
   
   # save plot
   png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
   p <- ggplot(pdata,aes(x,y)) +
-    geom_line(cex=2) +
-    geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=1.5) +
+    geom_line(cex=1.2) +
+    geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=0.8) +
     geom_abline(slope=0,intercept=0) +
-    geom_vline(xintercept = xinterc,col='blue',cex=0.5,linetype="dashed") +
+    geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
+    geom_point(data=maxhr_per_activity, aes(x=hrmax,y=max(pdata$y,na.rm=T)/100), cex=1,alpha=0.15,
+               shape=16) +
     ylim(0,NA) +
+    # xlim(140,NA) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 5), limits = c(140, NA)) +
     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
-    annotate("text",cex=3,
+    annotate("rect",
+             xmin=141,xmax=(max(pdata$x,na.rm=T)-140)*0.35+140, #to get 35% of the window
+             ymin=max(pdata$y,na.rm=T)*0.93,ymax=max(pdata$y,na.rm=T)*1.03,
+             fill="white",color=NA,alpha=0.9) +
+    annotate("text",cex=2.5,
              label=paste0('maxHR=',round(xinterc,0)," bpm"),
-             x=min(pdata$x)+3,y=max(pdata$y),col='blue',hjust=0)  +
-    annotate("text", cex=3,
+             x=143,y=max(pdata$y,na.rm=T),col='red',hjust=0)  +
+    annotate("text", cex=2.5,
              label=paste0('n > maxHR=',error_act," (",round(error_perc,1),"%)"),
-             x=min(pdata$x)+3,y=max(pdata$y)*0.95,col='blue',hjust=0) +
+             x=143,y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
     theme_minimal() +
     theme(panel.grid.major.y = element_blank(),
           panel.grid.minor.y = element_blank(),
@@ -234,6 +258,13 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
 ############################################################################################################
 
 update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
+  # to check whether maxHR comes from the lab or not
+  if(maxHR == 999) {
+    maxHR <- 180
+    labmaxHR <- FALSE
+  } else {
+    labmaxHR <- TRUE
+  }
   sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
   if (length(str_split(sel.dirs,"/")[[1]]) == 5){
     sel.dirs <- list.dirs(sel.dirs)
@@ -247,9 +278,9 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
                           # maxhr=character(),
                           file=character(), #debug
                           stringsAsFactors=FALSE) 
-  cores <- detectCores()
-  cl <- makeCluster(cores[1]-1)
-  registerDoParallel(cl)
+  # cores <- detectCores()
+  # cl <- makeCluster(cores[1]-1)
+  # registerDoParallel(cl)
   start <- Sys.time()
   hr_vs_all <- foreach (file=files,.combine=rbind,
                         .packages=c("dplyr", "fit","stringr","zoo","splines"),
@@ -261,14 +292,16 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   end <- Sys.time()
   duration <- end - start
   print(duration)
-  stopCluster(cl)
+  # stopCluster(cl)
   
   # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
   
   #### CALCULATE MAX HR WITH TANGENT METHOD
   ath.code <- ath.info$ath.id[ath.info$name == athlete]
   hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
-  ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
+  ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
+                                                      max(maxHR,hrmax.athlete),
+                                                      hrmax.athlete)
   
   # check if hr_vs_all contains any rows, otherwise don't do anything below these lines and return ath.info.
   # NO HR DATA
