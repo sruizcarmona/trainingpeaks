@@ -229,7 +229,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     annotate("rect",
              xmin=141,xmax=(max(pdata$x,na.rm=T)-140)*0.35+140, #to get 35% of the window
              ymin=max(pdata$y,na.rm=T)*0.93,ymax=max(pdata$y,na.rm=T)*1.03,
-             fill="white",color=NA,alpha=0.9) +
+             fill="white",color=NA,alpha=0.95) +
     annotate("text",cex=2.5,
              label=paste0('maxHR=',round(xinterc,0)," bpm"),
              x=143,y=max(pdata$y,na.rm=T),col='red',hjust=0)  +

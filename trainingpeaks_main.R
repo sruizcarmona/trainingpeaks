@@ -45,11 +45,21 @@ if (file.exists('data/athlete_maxHR.txt')){
 }
 if (file.exists('data/athlete_goldVT.csv')){
   lab.goldVT <- read.csv('data/athlete_goldVT.csv')
+  lab.goldVT$gold.VT1 <- round(lab.goldVT$gold.VT1,2)
+  lab.goldVT$gold.VT2 <- round(lab.goldVT$gold.VT2,2)
 }
 
 
 ## -----------------------------------------------------------------------------
 # rm(tp.newzones)
+###################
+# initialize cluster
+###################
+# set up number of cores
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1) #not to overload your computer
+registerDoParallel(cl)
+
  writeLines(c("###############################",
                "##   TRAININGPEAKS PROJECT   ##",
                "###############################"))
@@ -83,12 +93,18 @@ for (athlete in sel.athletes){
   # you should be here if the athlete has not been processed, with a new row in the table
   # we need to check now if there is a lab-measured maxHR
   # if not, we will use 180 as default (to smooth HR over that later)
-  # if (exists('lab.maxHR')){
-  #   ath.maxHR <- if (athlete %in% lab.maxHR$name) {lab.maxHR$maxHR[lab.maxHR$name == athlete]} else {180}
-  # } else {
-  #   ath.maxHR <- 180
-  # }
-  ath.maxHR <- 190
+  if (exists('lab.maxHR')){
+    if (athlete %in% lab.maxHR$name) {
+      ath.maxHR <- lab.maxHR$maxHR[lab.maxHR$name == athlete]
+      tp.newzones[tp.newzones$name == athlete,"lab.maxHR"] <- ath.maxHR
+    } else {
+        ath.maxHR <- 999
+        tp.newzones[tp.newzones$name == athlete,"lab.maxHR"] <- NA
+    }
+  } else {
+    ath.maxHR <- 999
+    tp.newzones[tp.newzones$name == athlete,"lab.maxHR"] <- NA
+  }
   # Finally, run the function to get the zones and update the tp.newzones table
   tp.newzones <- update.ath_info_with_newzones(tp.newzones, athlete, ath.maxHR)
   # also, add the new "goldVT" zones, to include in the calculation later
@@ -106,6 +122,8 @@ for (athlete in sel.athletes){
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
   }
 }
+# stop cluster
+stopCluster(cl)
 # save everything in a file, so we don't need to calculate them every time
 save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
 tp.newzones
