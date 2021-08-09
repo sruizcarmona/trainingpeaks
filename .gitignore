@@ -6,6 +6,7 @@ list_athletes.txt
 *.csv
 *.xlsx
 
+.DS_Store
 ################################
 # History files
 .Rhistory
