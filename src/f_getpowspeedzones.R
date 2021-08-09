@@ -27,7 +27,12 @@ library(scales)
 ############################################################################################################
 
 get.hr_vs_all <- function(f,maxHR) {
-  fitdata <- try(read.fit(f),silent=T)
+  # add gpx support
+  if (str_detect(f,".gpx")){
+    fitdata <- try(create.fitdata_from_gpx(f),silent=T) 
+  } else {
+    fitdata <- try(read.fit(f),silent=T)
+  }
   if (class(fitdata) == "try-error"){return(NULL)}
   # discard if its shorter than a minute
   if (is.null(dim(fitdata$record)) || dim(fitdata$record)[1] < 60) {return(NULL)}
@@ -95,14 +100,14 @@ get.hr_vs_all <- function(f,maxHR) {
   if (dim(hva.act)[1] == 0){
     return(NULL)
   }
-  # check if max hr is higher than 5% maxHR for that athlete
-  # if so, smooth a bit more to discard outliers
-  if (max(hva.act$hr,na.rm=T) > maxHR*1.05){
-    index.max <- which.max(hva.act$hr)
-    i.start <- max(1,(index.max-100))
-    i.stop <-min(length(hva.act$hr),(index.max+100))
-    hva.act$hr[i.start:i.stop] <- smooth.data(hva.act$hr[i.start:i.stop],50)
-  }
+  ## check if max hr is higher than 5% maxHR for that athlete
+  ## if so, apply heavy smooth a bit more to discard outliers
+  #if (max(hva.act$hr,na.rm=T) > maxHR*1.05){
+  #  index.max <- which.max(hva.act$hr)
+  #  i.start <- max(1,(index.max-100))
+  #  i.stop <-min(length(hva.act$hr),(index.max+100))
+  #  hva.act$hr[i.start:i.stop] <- smooth.data(hva.act$hr[i.start:i.stop],50)
+  #}
   # check how pow and hr are correlated and store r2 to filter later
   if (!is.na(sport) & !is.null(fitdata$record$power) & !all(is.na(hva.act$power))){
     knots <- quantile(hva.act$hr, p = c(0.5))
@@ -122,10 +127,16 @@ get.hr_vs_all <- function(f,maxHR) {
     hva.act$speed.cor <- NA
   }
   hva.act$sport <- sport
+  # save extra info for duplicates et al
+  date <- if(!is.null(fitdata$session$start_time)){get.date_GARMIN(fitdata$session$start_time)}else{get.date_GARMIN(fitdata$record$timestamp[1])}
+  hva.act$date <- format(date,"%Y%m%d")
+  hva.act$start_time <- as.character(format(date,"%H:%M"))
+  hva.act$duration.min <- if (is.null(fitdata$session$total_timer)) {round((last(fitdata$record$timestamp)-first(fitdata$record$timestamp))/60,2)} else {round(fitdata$session$total_timer_time/60,2)}
+  hva.act$total_dist.km <- if(is.null(fitdata$session$total_distance)) {round(last(fitdata$record$distance/1000),2)} else {round(fitdata$session$total_distance/1000,2)}
+  hva.act$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
 }
-
 ############################################################################################################
 ## GET POWER ZONES 
 ## calculate power zones based on hrmax and hr/power correlation
@@ -180,7 +191,10 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     # mutate(file=last(str_split(file,"/")[[1]])) %>%
     # ungroup() %>%
     group_by(file) %>%
-    summarise(hrmax = max(hr),.groups="drop")
+    summarise(hrmax = max(hr),
+              sport=first(sport),
+              hr.sensor=first(hr.sensor),
+              .groups="drop")
   maxhr_per_activity.140 <- maxhr_per_activity %>% 
     filter(hrmax > 140) # 11FEB meeting addition
 
@@ -220,11 +234,33 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=0.8) +
     geom_abline(slope=0,intercept=0) +
     geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
-    geom_point(data=maxhr_per_activity, aes(x=hrmax,y=max(pdata$y,na.rm=T)/100), cex=1,alpha=0.15,
-               shape=16) +
-    ylim(0,NA) +
+    # annotate("rect",
+    #          xmin=140,xmax=max(pdata$x,na.rm=T), 
+    #          ymin=max(pdata$y,na.rm=T)/100 * -10,ymax=0,
+    #          fill="white",color=NA) +
+    geom_point(data=maxhr_per_activity.140,
+               aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -2), cex=1,alpha=0.15,shape=16,col="black") +
+    annotate("text",cex=1.5, label="all",
+             x=139, y=max(pdata$y,na.rm=T)/100 * -2,col='black',hjust=1)  +
+    {if(dim(maxhr_per_activity.140 %>% filter(sport == 1))[1] > 0) {
+      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 1),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -4), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="run",
+             x=139, y=max(pdata$y,na.rm=T)/100 * -4,col='black',hjust=1)  +
+    {if(dim(maxhr_per_activity.140 %>% filter(sport == 2))[1] > 0) {
+      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 2),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -5.5), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="bike",
+             x=139, y=max(pdata$y,na.rm=T)/100 * -5.5,col='black',hjust=1)  +
+    {if(dim(maxhr_per_activity.140 %>% filter(hr.sensor == TRUE))[1] > 0) {
+      geom_point(data=maxhr_per_activity.140 %>% filter(hr.sensor == TRUE),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -7), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="chestHR",
+             x=139, y=max(pdata$y,na.rm=T)/100 * -7,col='black',hjust=1)  +
+    # ylim(0,NA) +
+    ylim(max(pdata$y,na.rm=T)/100 * -7,NA) +
     # xlim(140,NA) +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 5), limits = c(140, NA)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 5), limits = c(139, NA)) +
     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
     annotate("rect",
              xmin=141,xmax=(max(pdata$x,na.rm=T)-140)*0.35+140, #to get 35% of the window
@@ -232,10 +268,12 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
              fill="white",color=NA,alpha=0.95) +
     annotate("text",cex=2.5,
              label=paste0('maxHR=',round(xinterc,0)," bpm"),
-             x=143,y=max(pdata$y,na.rm=T),col='red',hjust=0)  +
+             x=(max(pdata$x,na.rm=T)-140)*0.02+140, # to get 5% of the window
+             y=max(pdata$y,na.rm=T),col='red',hjust=0)  +
     annotate("text", cex=2.5,
              label=paste0('n > maxHR=',error_act," (",round(error_perc,1),"%)"),
-             x=143,y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
+             x=(max(pdata$x,na.rm=T)-140)*0.02+140,
+             y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
     theme_minimal() +
     theme(panel.grid.major.y = element_blank(),
           panel.grid.minor.y = element_blank(),
@@ -276,6 +314,10 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
                           power.cor=character(), speed.cor=character(),sport=character(),
                           # maxhr=character(),
+                          date=character(),start_time=character(),duration.min=character(), total_dist.km=character(), # for duplicates
+                          hr.sensor=character(), #to check hr sensor, from 
+                          # https://www.thisisant.com/forum/viewthread/6933
+                          # https://github.com/GoldenCheetah/GoldenCheetah/blob/master/src/FileIO/FitRideFile.cpp
                           file=character(), #debug
                           stringsAsFactors=FALSE) 
   # cores <- detectCores()
@@ -284,7 +326,7 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   start <- Sys.time()
   hr_vs_all <- foreach (file=files,.combine=rbind,
                         .packages=c("dplyr", "fit","stringr","zoo","splines"),
-                        .export=c("get.hr_vs_all","smooth.data")) %dopar% {
+                        .export=c("get.hr_vs_all","smooth.data","get.date_GARMIN")) %dopar% {
     temp <- get.hr_vs_all(file,maxHR)
     temp
   }
@@ -294,20 +336,39 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   print(duration)
   # stopCluster(cl)
   
-  # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
-  
-  #### CALCULATE MAX HR WITH TANGENT METHOD
-  ath.code <- ath.info$ath.id[ath.info$name == athlete]
-  hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
-  ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
-                                                      max(maxHR,hrmax.athlete),
-                                                      hrmax.athlete)
-  
   # check if hr_vs_all contains any rows, otherwise don't do anything below these lines and return ath.info.
   # NO HR DATA
   if (is.null(hr_vs_all)){
     return(ath.info)
   }
+  
+  # remove duplicates, as in main trainingpeaks process
+  dups <- hr_vs_all %>% 
+    group_by(file) %>% 
+    filter(row_number()==1) %>% 
+    ungroup() %>% 
+    group_by(date,start_time) %>% 
+    arrange(-total_dist.km, .by_group=T) %>% 
+    mutate(id=row_number(),source=first(file)) %>% 
+    ungroup() %>% 
+    mutate_if(is.factor, as.character) %>%
+    filter(id > 1) %>%
+    select(file)
+  hr_vs_all$id <- 1
+  hr_vs_all$id[hr_vs_all$file %in% dups$file] <- 2
+  hr_vs_all <- hr_vs_all %>% 
+    filter(id == 1)
+  
+  # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
+  
+  #### CALCULATE MAX HR WITH TANGENT METHOD
+  ath.code <- ath.info$ath.id[ath.info$name == athlete]
+  hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
+  ath.info$tangent.maxHR[ath.info$name == athlete] <- hrmax.athlete
+  ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
+                                                      max(maxHR,hrmax.athlete),
+                                                      hrmax.athlete)
+  hrmax.athlete <- ath.info$maxHR[ath.info$name == athlete]
   
   # remove activities with hr higher than updated maxHR
   hr_vs_all <- hr_vs_all %>%
@@ -323,7 +384,6 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   #   hrmax.athlete <- round(max(hr_vs_all$hr),0)
   #   ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
   # }
-  
   
   # get power zones
   # filter out activities that we do not want
