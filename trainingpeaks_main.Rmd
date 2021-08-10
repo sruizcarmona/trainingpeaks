@@ -86,6 +86,7 @@ sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
 ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
+ph_folders4 <- list.dirs('../../2107_TRAININGPEAKS/')
 all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3)
 ```
 
