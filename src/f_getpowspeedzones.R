@@ -36,10 +36,12 @@ get.hr_vs_all <- function(f,maxHR) {
   if (class(fitdata) == "try-error"){return(NULL)}
   # discard if its shorter than a minute
   if (is.null(dim(fitdata$record)) || dim(fitdata$record)[1] < 60) {return(NULL)}
-  # save sport (to filter later)
+  # save sport (to filter later) or discard if it contains more than 1 row
   if (!is.null(fitdata$session$sport)){
+    if(length(fitdata$session$sport) > 1) {return(NULL)}
     sport <- fitdata$session$sport
   } else if (!is.null(fitdata$sport$sport)){
+    if(length(fitdata$sport$sport) > 1) {return(NULL)}
     sport <- fitdata$sport$sport
   } else {
     sport <- 0
