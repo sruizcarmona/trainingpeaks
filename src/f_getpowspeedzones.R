@@ -199,6 +199,11 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
               .groups="drop")
   maxhr_per_activity.140 <- maxhr_per_activity %>% 
     filter(hrmax > 140) # 11FEB meeting addition
+  
+  # some cases with very few activities with >140, so in case there are less than 10, I will use the whole dataset
+  if(dim(maxhr_per_activity.140)[1] < 10) {
+    maxhr_per_activity.140 <- maxhr_per_activity
+  }
 
   pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
