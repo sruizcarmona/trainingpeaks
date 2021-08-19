@@ -175,7 +175,11 @@ create.fitdata_from_gpx <- function(gpxfile) {
            # day=format(as.POSIXct(date),"%y%m%d"),
            # timeofday=format(as.POSIXct(date),"%H:%M:%S"),
            # time=as.POSIXct(time,format=dateformat,tz="UTC"),
-           timestamp=as.numeric(as.POSIXct(time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC"))-631065600,
+           timestamp = as.numeric(as.POSIXct(time,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC"))-631065600,
+           timestamp_corr = as.numeric(as.POSIXct(time,format="%Y-%m-%dT%H:%M:%S.000Z",tz="UTC"))-631065600,
+           time2 = str_remove(time, "\\...."),
+           timestamp2 = as.numeric(as.POSIXct(time2,format="%Y-%m-%dT%H:%M:%SZ",tz="UTC"))-631065600,
+           timestamp = coalesce(timestamp, timestamp_corr, timestamp2),
            laglon=lag(lon),
            laglat=lag(lat)) %>% 
     rowwise() %>%
@@ -189,7 +193,7 @@ create.fitdata_from_gpx <- function(gpxfile) {
            speed=replace_na((step_distance/1000)/(step_s/3600),0),
            speed=speed/3.79, # same 3.79 conversion factor as fit files
            speed=smooth.data(speed,5)) %>% 
-    select(-step_s,-laglon,-laglat,-step_distance,-time)
+    select(-step_s,-laglon,-laglat,-step_distance,-time, -timestamp_corr, -time2, -timestamp2)
   # create session with same fields as in fitdata$session
   session <- data.frame(start_time=0)
   session$avg_altitude <- round(mean(gpx$altitude),1)

@@ -73,6 +73,7 @@ source('src/ctt_definition.R') # constant variables and files
 source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
+source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
 ```
 
 ### Select athletes and directory
@@ -252,7 +253,7 @@ for (athlete in sel.athletes){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
   }
-  save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
+  # save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
 }
 # stop cluster
 stopCluster(cl)

@@ -19,18 +19,23 @@ source('src/ctt_definition.R') # constant variables and files
 source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
+source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
 
 
 ## -----------------------------------------------------------------------------
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
 sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
+sel.athletes <- c(sel.athletes, read.table("data/list_athletes_2107.txt",stringsAsFactors = F)$V1)
+# some athletes are duplicated on the july update
+sel.athletes <- unique(sel.athletes)
 
 # all folders in PRO_HEART, where sel.athletes folders are located
 ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
 ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
-all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3)
+ph_folders4 <- list.dirs(list.dirs('../../2107_TRAININGPEAKS', recursive=F), recursive = F)
+all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3, ph_folders4)
 
 
 ## -----------------------------------------------------------------------------
@@ -40,20 +45,72 @@ if(file.exists('out/rdas/tpeaks_newzones.rda')){
 
 
 ## -----------------------------------------------------------------------------
+####################################################
+#### maxHR
 if (file.exists('data/athlete_maxHR.txt')){
   lab.maxHR <- read.table('data/athlete_maxHR.txt')
   colnames(lab.maxHR) <- c('name','maxHR')
 }
+# add july update
+if (file.exists('data/athlete_maxHR_2107.txt')){
+  lab.maxHR <- rbind(lab.maxHR,
+                     setNames(read.table('data/athlete_maxHR_2107.txt'),c('name','maxHR')))
+}
+# get the most updated one, for duplicates
+lab.maxHR <- lab.maxHR %>% 
+  arrange(name) %>% 
+  group_by(name) %>% 
+  filter(row_number()==n()) %>% 
+  ungroup()
+
+####################################################
+#### gold VT
 if (file.exists('data/athlete_goldVT.csv')){
   lab.goldVT <- read.csv('data/athlete_goldVT.csv')
   lab.goldVT$gold.VT1 <- round(lab.goldVT$gold.VT1,2)
   lab.goldVT$gold.VT2 <- round(lab.goldVT$gold.VT2,2)
 }
+
+# add july update
+if (file.exists('data/athlete_goldVT_2107.csv')){
+  lab.goldVT <- rbind(lab.goldVT, read.csv('data/athlete_goldVT_2107.csv') %>% 
+                        mutate(gold.VT1=round(gold.VT1,2),
+                               gold.VT2=round(gold.VT2,2)))
+}
+# get the most updated one, for duplicates
+lab.goldVT <- lab.goldVT %>% 
+  arrange(ath.name) %>% 
+  group_by(ath.name) %>% 
+  # mutate(i=row_number(),
+  #        n=n()) %>%
+  # filter(n==2) %>%
+  filter(row_number()==n()) %>%
+  ungroup()
+
+####################################################
+#### test dates
 if (file.exists('data/athlete_testdates.csv')){
   ath.testdates <- readr::read_csv('data/athlete_testdates.csv',
                                    col_types = cols("c",col_date(format="%d/%m/%y"),
                                                     col_date(format="%d/%m/%y")))
 }
+# add july update
+if (file.exists('data/athlete_testdates_2107.csv')){
+  ath.testdates <- rbind(ath.testdates,
+                         readr::read_csv('data/athlete_testdates_2107.csv',
+                                         col_types = cols("c",col_date(format="%d/%m/%y"),
+                                                          col_date(format="%d/%m/%y"))))
+}
+# get the first one, as the second one is only 1 test date update
+ath.testdates <- ath.testdates %>% 
+  arrange(name) %>% 
+  group_by(name) %>% 
+  # mutate(i=row_number(),
+  #        n=n(),
+  #        nas=ifelse(is.na(test_date_2),2,1)) %>%
+  # filter(n==2) %>%
+  filter(row_number()==1) %>%
+  ungroup()
 
 
 ## -----------------------------------------------------------------------------
@@ -127,7 +184,7 @@ for (athlete in sel.athletes){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- NA
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
   }
-  save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
+  # save(tp.newzones,file='out/rdas/tpeaks_newzones.rda')
 }
 # stop cluster
 stopCluster(cl)
