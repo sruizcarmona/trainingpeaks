@@ -176,127 +176,131 @@ get.speed_zones <- function(data,hrmax) {
   return(setNames(data.frame(cor,t(speed.zones)),c("cor",paste0('speed',seq(0,100,10)),paste0('vt.speed',c(83,94)))))
 }
 
-############################################################################################################
-## GET MAXHR WITH TANGENT METHOD 
-## use tangent method with all maxhr for all activities to calculate the actual maxHR
-###
-## input 
-## output maxHR and plot saved in "png" folder
-############################################################################################################
-
-get.maxhr_tangent <- function(hr_vs_all,ath.code) {
-  mylim_x <- NULL
-  if (is.null(hr_vs_all)){
-    return (0)
-  }
-  maxhr_per_activity <- hr_vs_all %>%
-    # rowwise() %>%
-    # mutate(file=last(str_split(file,"/")[[1]])) %>%
-    # ungroup() %>%
-    group_by(file) %>%
-    summarise(hrmax = max(hr),
-              sport=first(sport),
-              hr.sensor=first(hr.sensor),
-              .groups="drop")
-  maxhr_per_activity.140 <- maxhr_per_activity %>% 
-    filter(hrmax > 140) # 11FEB meeting addition
-  
-  # some cases with very few activities with >140, so in case there are less than 10, I will use the whole dataset
-  if(dim(maxhr_per_activity.140)[1] < 10) {
-    maxhr_per_activity.140 <- maxhr_per_activity
-    #change limits for plotting later
-    mylim_x <- 89
-  }
-
-  pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
-  pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
-  # calc interc
-  # make it higher than 180, to remove artifacts (BA_023)
-  xinterc <- 0
-  error_perc <- 999
-  min.ordered <- order(pdata$deriv)
-  min.o.i <- 0
-  # SRC COMMENT FILTERING, JUST LET IT WORK
-  # while ((xinterc < 180 & error_perc > 1) | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
-  min.o.i <- min.o.i + 1
-  yinterc <- pdata$y[min.ordered[min.o.i]] - pdata$x[min.ordered[min.o.i]]*pdata$deriv[min.ordered[min.o.i]]
-  xinterc <- round(-yinterc/pdata$deriv[min.ordered[min.o.i]],0)
-  error_act <- sum(maxhr_per_activity$hrmax > xinterc)
-  error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
-  # }
-  # # ### NEW ADDITION AFTER MEETING 11 FEB
-  # # calculate where deriv crosses 0
-  # dzeros <- NULL
-  # for (i in seq_along(pdata$deriv)) {dzeros <- c(dzeros,pdata$deriv[i]*pdata$deriv[i-1])}
-  # # remove last bump if its after the minimum tangent and it goes to 0
-  # sec.last.index <- which(dzeros < 0)[length(which(dzeros < 0))-1]
-  # if (length(sec.last.index) > 0 && sec.last.index > min.ordered[min.o.i]){
-  #   pdata$y[sec.last.index:length(pdata$y)] <- NA
-  # }
-  # # recalc deriv, so the last hump is explicitly ignored
-  # # pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
-  # ###############
-  
-  # fix mylim depending on whether there are activities with max 140 (see above)
-  if(is.null(mylim_x)) {mylim_x <- 139}
-  
-  # save plot
-  png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
-  p <- ggplot(pdata,aes(x,y)) +
-    geom_line(cex=1.2) +
-    geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=0.8) +
-    geom_abline(slope=0,intercept=0) +
-    geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
-    # annotate("rect",
-    #          xmin=140,xmax=max(pdata$x,na.rm=T), 
-    #          ymin=max(pdata$y,na.rm=T)/100 * -10,ymax=0,
-    #          fill="white",color=NA) +
-    geom_point(data=maxhr_per_activity.140,
-               aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -2), cex=1,alpha=0.15,shape=16,col="black") +
-    annotate("text",cex=1.5, label="all",
-             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -2,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(sport == 1))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 1),
-                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -4), cex=1,alpha=0.15,shape=16,col="gray50")}} +
-    annotate("text",cex=1.2, label="run",
-             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -4,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(sport == 2))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 2),
-                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -5.5), cex=1,alpha=0.15,shape=16,col="gray50")}} +
-    annotate("text",cex=1.2, label="bike",
-             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -5.5,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(hr.sensor == TRUE))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(hr.sensor == TRUE),
-                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -7), cex=1,alpha=0.15,shape=16,col="gray50")}} +
-    annotate("text",cex=1.2, label="chestHR",
-             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -7,col='black',hjust=1)  +
-    # ylim(0,NA) +
-    ylim(max(pdata$y,na.rm=T)/100 * -7,NA) +
-    # xlim(140,NA) +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 5), limits = c(mylim_x, NA)) +
-    labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
-    annotate("rect",
-             xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.35+(mylim_x+1), #to get 35% of the window
-             ymin=max(pdata$y,na.rm=T)*0.93,ymax=max(pdata$y,na.rm=T)*1.03,
-             fill="white",color=NA,alpha=0.95) +
-    annotate("text",cex=2.5,
-             label=paste0('maxHR=',round(xinterc,0)," bpm"),
-             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
-             y=max(pdata$y,na.rm=T),col='red',hjust=0)  +
-    annotate("text", cex=2.5,
-             label=paste0('n > maxHR=',error_act," (",round(error_perc,1),"%)"),
-             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
-             y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
-    theme_minimal() +
-    theme(panel.grid.major.y = element_blank(),
-          panel.grid.minor.y = element_blank(),
-          panel.grid.minor.x = element_blank(),
-          axis.text.y = element_blank())
-  plot(p)
-  dev.off()
-  hrmax <- round(xinterc,0)
-  return(hrmax)
-}
+### MOVED TO EXTERNAL FILE
+# ############################################################################################################
+# ## GET MAXHR WITH TANGENT METHOD 
+# ## use tangent method with all maxhr for all activities to calculate the actual maxHR
+# ###
+# ## input 
+# ## output maxHR and plot saved in "png" folder
+# ############################################################################################################
+# 
+# get.maxhr_tangent <- function(hr_vs_all,ath.code) {
+#   mylim_x <- NULL
+#   if (is.null(hr_vs_all)){
+#     return (0)
+#   }
+#   maxhr_per_activity <- hr_vs_all %>%
+#     # rowwise() %>%
+#     # mutate(file=last(str_split(file,"/")[[1]])) %>%
+#     # ungroup() %>%
+#     group_by(file) %>%
+#     summarise(hrmax = max(hr),
+#               sport=first(sport),
+#               hr.sensor=first(hr.sensor),
+#               .groups="drop")
+#   maxhr_per_activity.140 <- maxhr_per_activity %>% 
+#     filter(hrmax > 140) # 11FEB meeting addition
+#   ## edit to optimize weights for tangent
+#   assign(paste0("maxhr_act_",ath.code), maxhr_per_activity)
+#   save(list=paste0("maxhr_act_",ath.code), file=paste0("optim_maxhr_act_",ath.code,".rda"))
+#   
+#   # some cases with very few activities with >140, so in case there are less than 10, I will use the whole dataset
+#   if(dim(maxhr_per_activity.140)[1] < 10) {
+#     maxhr_per_activity.140 <- maxhr_per_activity
+#     #change limits for plotting later
+#     mylim_x <- 89
+#   }
+# 
+#   pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
+#   pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
+#   # calc interc
+#   # make it higher than 180, to remove artifacts (BA_023)
+#   xinterc <- 0
+#   error_perc <- 999
+#   min.ordered <- order(pdata$deriv)
+#   min.o.i <- 0
+#   # SRC COMMENT FILTERING, JUST LET IT WORK
+#   # while ((xinterc < 180 & error_perc > 1) | xinterc > 210 | (xinterc < 190 & error_perc > 10) ) {
+#   min.o.i <- min.o.i + 1
+#   yinterc <- pdata$y[min.ordered[min.o.i]] - pdata$x[min.ordered[min.o.i]]*pdata$deriv[min.ordered[min.o.i]]
+#   xinterc <- round(-yinterc/pdata$deriv[min.ordered[min.o.i]],0)
+#   error_act <- sum(maxhr_per_activity$hrmax > xinterc)
+#   error_perc <- sum(maxhr_per_activity$hrmax > xinterc)/length(maxhr_per_activity$hrmax) * 100
+#   # }
+#   # # ### NEW ADDITION AFTER MEETING 11 FEB
+#   # # calculate where deriv crosses 0
+#   # dzeros <- NULL
+#   # for (i in seq_along(pdata$deriv)) {dzeros <- c(dzeros,pdata$deriv[i]*pdata$deriv[i-1])}
+#   # # remove last bump if its after the minimum tangent and it goes to 0
+#   # sec.last.index <- which(dzeros < 0)[length(which(dzeros < 0))-1]
+#   # if (length(sec.last.index) > 0 && sec.last.index > min.ordered[min.o.i]){
+#   #   pdata$y[sec.last.index:length(pdata$y)] <- NA
+#   # }
+#   # # recalc deriv, so the last hump is explicitly ignored
+#   # # pdata$deriv = c(0,diff(pdata$y)/diff(pdata$x))
+#   # ###############
+#   
+#   # fix mylim depending on whether there are activities with max 140 (see above)
+#   if(is.null(mylim_x)) {mylim_x <- 139}
+#   
+#   # save plot
+#   png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
+#   p <- ggplot(pdata,aes(x,y)) +
+#     geom_line(cex=1.2) +
+#     geom_abline(slope=pdata$deriv[min.ordered[min.o.i]],intercept=yinterc,color="red",cex=0.8) +
+#     geom_abline(slope=0,intercept=0) +
+#     geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
+#     # annotate("rect",
+#     #          xmin=140,xmax=max(pdata$x,na.rm=T), 
+#     #          ymin=max(pdata$y,na.rm=T)/100 * -10,ymax=0,
+#     #          fill="white",color=NA) +
+#     geom_point(data=maxhr_per_activity.140,
+#                aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -2), cex=1,alpha=0.15,shape=16,col="black") +
+#     annotate("text",cex=1.5, label="all",
+#              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -2,col='black',hjust=1)  +
+#     {if(dim(maxhr_per_activity.140 %>% filter(sport == 1))[1] > 0) {
+#       geom_point(data=maxhr_per_activity.140 %>% filter(sport == 1),
+#                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -4), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+#     annotate("text",cex=1.2, label="run",
+#              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -4,col='black',hjust=1)  +
+#     {if(dim(maxhr_per_activity.140 %>% filter(sport == 2))[1] > 0) {
+#       geom_point(data=maxhr_per_activity.140 %>% filter(sport == 2),
+#                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -5.5), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+#     annotate("text",cex=1.2, label="bike",
+#              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -5.5,col='black',hjust=1)  +
+#     {if(dim(maxhr_per_activity.140 %>% filter(hr.sensor == TRUE))[1] > 0) {
+#       geom_point(data=maxhr_per_activity.140 %>% filter(hr.sensor == TRUE),
+#                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -7), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+#     annotate("text",cex=1.2, label="chestHR",
+#              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -7,col='black',hjust=1)  +
+#     # ylim(0,NA) +
+#     ylim(max(pdata$y,na.rm=T)/100 * -7,NA) +
+#     # xlim(140,NA) +
+#     scale_x_continuous(breaks = scales::pretty_breaks(n = 5), limits = c(mylim_x, NA)) +
+#     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
+#     annotate("rect",
+#              xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.35+(mylim_x+1), #to get 35% of the window
+#              ymin=max(pdata$y,na.rm=T)*0.93,ymax=max(pdata$y,na.rm=T)*1.03,
+#              fill="white",color=NA,alpha=0.95) +
+#     annotate("text",cex=2.5,
+#              label=paste0('maxHR=',round(xinterc,0)," bpm"),
+#              x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+#              y=max(pdata$y,na.rm=T),col='red',hjust=0)  +
+#     annotate("text", cex=2.5,
+#              label=paste0('n > maxHR=',error_act," (",round(error_perc,1),"%)"),
+#              x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
+#              y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
+#     theme_minimal() +
+#     theme(panel.grid.major.y = element_blank(),
+#           panel.grid.minor.y = element_blank(),
+#           panel.grid.minor.x = element_blank(),
+#           axis.text.y = element_blank())
+#   plot(p)
+#   dev.off()
+#   hrmax <- round(xinterc,0)
+#   return(hrmax)
+# }
 
 ############################################################################################################
 ## GET ATHLETE INFO WITH ZONES 
