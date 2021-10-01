@@ -277,11 +277,7 @@ process.fitfile <- function(file,ath.id) {
     act.err <- onerow.df(c(ath.id,rep('activity error (short/no data)',length(act.err.names)-2),file), act.err.names)
     return(act.err)
   }
-  # discard if HR == 0/NA > 50%
-  if (sum(fitdata$record$heart_rate == 0,na.rm=T) / length(fitdata$record$heart_rate) > 0.5){
-    act.err <- onerow.df(c(ath.id,rep('activity error (missing HR > 50%)',length(act.err.names)-2),file), act.err.names)
-    return(act.err)
-  }
+  
   # discard if activity contains more than 1 row
   if(length(fitdata$session$sport) > 1 | length(fitdata$sport$sport) > 1) {
     act.err <- onerow.df(c(ath.id,rep('activity error (multiple sports/rows)',length(act.err.names)-2),file), act.err.names)
