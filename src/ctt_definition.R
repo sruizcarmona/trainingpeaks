@@ -25,7 +25,7 @@ names(sport_code) <- c("Undefined","Running","Cycling","Swimming","Cardio","Rowi
 #                    "cal","ascent","power.max","power.avg","power.norm","work","stress.score",
 #                    "total.dist","intensity.factor","training.effect","file")
 act.err.names <- c("ath.id","date","year","month","week","start_time","duration.min","pause.min","total_dist.km",
-                   "cum_ascent.m","hrmax_athlete","hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
+                   "cum_ascent.m","hr.sensor","hrmax_athlete","hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
                    "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
                    "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
                    "vt.z1","vt.z2","vt.z3","vt.z1.time","vt.z2.time","vt.z3.time",

@@ -70,6 +70,8 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   a$pause.min <- if(is.null(fitdata$session$total_elapsed_time)){NA}else{round((fitdata$session$total_elapsed_time-fitdata$session$total_timer_time)/60,2)}
   a$total_dist.km <- if(is.null(fitdata$session$total_distance)) {round(last(fitdata$record$distance/1000,2))} else {round(fitdata$session$total_distance/1000,2)}
   a$cum_ascent.m <- if(is.null(fitdata$session$total_ascent)){NA}else{fitdata$session$total_ascent}
+  # add info of sensor
+  a$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   a$hrmax_athlete <- tp.newzones$maxHR[tp.newzones$ath.id == ath.id]
   ###################
   # remove first and last 10 seconds, to reduce risk of peaks in sensor pairing, gps or other stuff
@@ -275,6 +277,17 @@ process.fitfile <- function(file,ath.id) {
     act.err <- onerow.df(c(ath.id,rep('activity error (short/no data)',length(act.err.names)-2),file), act.err.names)
     return(act.err)
   }
+  # discard if HR == 0/NA > 50%
+  if (sum(fitdata$record$heart_rate == 0,na.rm=T) / length(fitdata$record$heart_rate) > 0.5){
+    act.err <- onerow.df(c(ath.id,rep('activity error (missing HR > 50%)',length(act.err.names)-2),file), act.err.names)
+    return(act.err)
+  }
+  # discard if activity contains more than 1 row
+  if(length(fitdata$session$sport) > 1 | length(fitdata$sport$sport) > 1) {
+    act.err <- onerow.df(c(ath.id,rep('activity error (multiple sports/rows)',length(act.err.names)-2),file), act.err.names)
+    return(act.err)
+  }
+  
   ###################
   # process activity
   ###################
