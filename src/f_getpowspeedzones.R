@@ -132,6 +132,8 @@ get.hr_vs_all <- function(f,maxHR) {
     hva.act$speed.cor <- NA
   }
   hva.act$sport <- sport
+  # for sport plot, not to process for the zone calculation
+  hva.act$sport_plot <- sport_plot
   # save extra info for duplicates et al
   date <- if(!is.null(fitdata$session$start_time)){get.date_GARMIN(fitdata$session$start_time)}else{get.date_GARMIN(fitdata$record$timestamp[1])}
   hva.act$date <- format(date,"%Y%m%d")
