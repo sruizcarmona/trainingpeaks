@@ -69,7 +69,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     # ungroup() %>%
     group_by(file) %>%
     summarise(hrmax = max(hr),
-              sport=first(sport),
+              sport=first(sport_plot),
               hr.sensor=first(hr.sensor),
               .groups="drop")
   maxhr_per_activity.140 <- maxhr_per_activity %>% 

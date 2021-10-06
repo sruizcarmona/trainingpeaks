@@ -40,11 +40,14 @@ get.hr_vs_all <- function(f,maxHR) {
   if (!is.null(fitdata$session$sport)){
     if(length(fitdata$session$sport) > 1) {return(NULL)}
     sport <- fitdata$session$sport
+    sport_plot <- sport
   } else if (!is.null(fitdata$sport$sport)){
     if(length(fitdata$sport$sport) > 1) {return(NULL)}
     sport <- fitdata$sport$sport
+    sport_plot <- sport
   } else {
     sport <- 0
+    sport_plot <- sport
   }
   # if heart rate is not present, skip file as there is no use
   if (!'heart_rate' %in% names(fitdata$record)){

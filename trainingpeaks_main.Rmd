@@ -192,9 +192,9 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1) #not to overload your computer
 registerDoParallel(cl)
 
- writeLines(c("###############################",
-               "##   TRAININGPEAKS PROJECT   ##",
-               "###############################"))
+writeLines(c("###############################",
+             "##   TRAININGPEAKS PROJECT   ##",
+             "###############################"))
 for (athlete in sel.athletes){
   writeLines(c("","###############################",
                "Calculating maxHR and HR/Power/Speed correlations...",
