@@ -71,6 +71,10 @@ get.hr_vs_all <- function(f,maxHR) {
   fitdata$record$heart_rate[1:10] <- NA
   hrlength <- length(fitdata$record$heart_rate)
   fitdata$record$heart_rate[(hrlength-9):hrlength] <- NA
+  # if, after that, the first 20 values are above 180, clean them too, as they are probably artifacts
+  if(any(fitdata$record$heart_rate[1:30] > 180, na.rm = T)){
+    fitdata$record$heart_rate[1:30] <- NA
+  }
   # clean hr=0, as sometimes the sensor fails
   fitdata$record$heart_rate[fitdata$record$heart_rate == 0] <- NA
   # smooth hr and save
