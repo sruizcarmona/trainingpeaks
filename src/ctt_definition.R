@@ -40,6 +40,6 @@ act.err.names <- c("ath.id","date","year","month","week","start_time","duration.
 ########################
 #### get product and manufacturer
 ########################
-product_id <- setNames(read.table("data/product_id.txt", sep="\t", stringsAsFactors=F), c("brand", "model", "product_id"))
+product_id <- setNames(read.table("data/product_id.tsv", sep="\t", stringsAsFactors=F), c("brand", "model", "product_id"))
 product_id$model <- tolower(product_id$model)
-brand_id <- setNames(read.table("data/manufacturer_id.txt", sep="\t", stringsAsFactors=F), c("brand", "brand_id"))
+brand_id <- setNames(read.table("data/manufacturer_id.tsv", sep="\t", stringsAsFactors=F), c("brand", "brand_id"))
