@@ -72,6 +72,12 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   a$cum_ascent.m <- if(is.null(fitdata$session$total_ascent)){NA}else{fitdata$session$total_ascent}
   # add info of sensor
   a$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
+  # add info about device (brand and product code and name)
+  a$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {NA}
+  a$device_brand_name <- ifelse(device_brand_id %in% brand_id$brand_id, brand_id$brand[brand_id$brand_id == device_brand_id], "unknown")
+  a$device_model_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
+  a$device_model_name <- ifelse(device_model_id %in% product_id$product_id[product_id$brand == device_brand_name],
+                                product_id %>% filter(brand == device_brand_name & product_id == device_model_id) %>% pull(model), "unknown")
   a$hrmax_athlete <- tp.newzones$maxHR[tp.newzones$ath.id == ath.id]
   ###################
   # remove first and last 10 seconds, to reduce risk of peaks in sensor pairing, gps or other stuff
