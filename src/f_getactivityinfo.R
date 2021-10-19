@@ -73,9 +73,9 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   # add info of sensor
   a$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   # add info about device (brand and product code and name)
-  a$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {NA}
+  a$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {0}
   a$device_brand_name <- ifelse(a$device_brand_id %in% brand_id$brand_id, brand_id$brand[brand_id$brand_id == a$device_brand_id], "unknown")
-  a$device_model_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
+  a$device_model_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {0}
   a$device_model_name <- ifelse(a$device_model_id %in% product_id$product_id[product_id$brand == a$device_brand_name],
                                 product_id %>% filter(brand == a$device_brand_name & product_id == a$device_model_id) %>% pull(model), "unknown")
   a$hrmax_athlete <- tp.newzones$maxHR[tp.newzones$ath.id == ath.id]
