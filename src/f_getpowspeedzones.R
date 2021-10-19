@@ -247,7 +247,11 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
     filter(row_number()==1) %>% 
     ungroup() %>% 
     group_by(date,start_time) %>% 
-    arrange(-total_dist.km, .by_group=T) %>% 
+    # mutate device_brand_id so 0s are 9999 and do not interfere with sorting in next step
+    mutate(device_brand_id = if_else(device_brand_id == 0, 9999, device_brand_id)) %>% 
+    # arrange by device_brand_id (so garmin would always be higher)
+    arrange(device_brand_id, -total_dist.km, .by_group=T) %>%
+    # arrange(-total_dist.km, .by_group=T) %>% 
     mutate(id=row_number(),source=first(file)) %>% 
     ungroup() %>% 
     mutate_if(is.factor, as.character) %>%
