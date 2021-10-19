@@ -82,6 +82,10 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   ###################
   # remove first and last 10 seconds, to reduce risk of peaks in sensor pairing, gps or other stuff
   fd <- fitdata$record[11:(dim(fitdata$record)[1]-10),]
+  # if, after that, the first 20 values are above 180, clean them too, as they are probably artifacts
+  if(any(fd$heart_rate[1:20] > 180, na.rm = T)){
+     fd$heart_rate[1:20] <- NA
+  }
   rownames(fd) <- NULL
   ###################
   # get info from heart_rate
