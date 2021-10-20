@@ -261,6 +261,9 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   hr_vs_all$id[hr_vs_all$file %in% dups$file] <- 2
   hr_vs_all <- hr_vs_all %>% 
     filter(id == 1)
+  # remove suunto watches
+  hr_vs_all <- hr_vs_all %>% 
+    filter(device_brand_id != 23)
   
   # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
   
