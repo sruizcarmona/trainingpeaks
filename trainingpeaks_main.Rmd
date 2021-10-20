@@ -293,12 +293,16 @@ for (athlete in sel.athletes){
                "Processing all fit files...",
                paste0("Working with athlete ",athlete),""))
   
-  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
-  if (length(str_split(sel.dirs,"/")[[1]]) == 5){
-    sel.dirs <- list.dirs(sel.dirs)
-  } else {
-    sel.dirs <- list.dirs(sel.dirs,recursive=F)
-    sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  # edit 211020, check all folders, not just the first one!
+  sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, athlete)]
+  sel.dirs <- NULL
+  for (sel.dir in sel.dirs.tmp) {
+    if (length(str_split(sel.dir,"/")[[1]]) == 5){
+      sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
+    } else {
+      sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
+      sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
+    }
   }
   files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
@@ -370,7 +374,7 @@ all.activities <- type.convert(all.activities, as.is=T)
 dup.sessions <- rbind(dup.sessions, all.activities %>%
                         group_by(ath.id, date, start_time) %>% 
                         # mutate device_brand_id so 0s are 9999 and do not interfere with sorting in next step
-                        mutate(device_brand_id = if_else(device_brand_id == 0, 9999, device_brand_id)) %>% 
+                        mutate(device_brand_id = ifelse(device_brand_id == 0, 9999, device_brand_id)) %>% 
                         # arrange by device_brand_id (so garmin would always be higher)
                         arrange(device_brand_id, -total_dist.km, .by_group=T) %>%
                         # arrange(-total_dist.km, .by_group=T) %>%
@@ -385,7 +389,7 @@ dup.sessions <- rbind(dup.sessions, all.activities %>%
 all.activities <- all.activities %>%
   group_by(ath.id, date, start_time) %>%
   # mutate device_brand_id so 0s are 9999 and do not interfere with sorting in next step
-  mutate(device_brand_id = if_else(device_brand_id == 0, 9999, device_brand_id)) %>% 
+  mutate(device_brand_id = ifelse(device_brand_id == 0, 9999, device_brand_id)) %>% 
   # arrange by device_brand_id (so garmin would always be higher)
   arrange(device_brand_id, -total_dist.km, .by_group=T) %>%
   # arrange(-total_dist.km, .by_group=T) %>%% 
