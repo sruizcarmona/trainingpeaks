@@ -145,8 +145,8 @@ get.hr_vs_all <- function(f,maxHR) {
   hva.act$duration.min <- if (is.null(fitdata$session$total_timer)) {round((last(fitdata$record$timestamp)-first(fitdata$record$timestamp))/60,2)} else {round(fitdata$session$total_timer_time/60,2)}
   hva.act$total_dist.km <- if(is.null(fitdata$session$total_distance)) {round(last(fitdata$record$distance/1000),2)} else {round(fitdata$session$total_distance/1000,2)}
   hva.act$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
-  hva.act$device_brand <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {NA}
-  hva.act$device_product <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
+  hva.act$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {NA}
+  hva.act$device_product_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
   hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
 }
