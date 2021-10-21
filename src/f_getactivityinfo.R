@@ -322,7 +322,7 @@ process.fitfile <- function(file,ath.id) {
     return(act.err)
   }
   # suunto watch (we have seen they are very unreliable)
-  if (!is.na(act$device_brand_id) & device_brand_id == 23) {
+  if (!is.na(act$device_brand_id) & act$device_brand_id == 23) {
     act.err <- onerow.df(c(ath.id, rep('activity error (suunto device, unreliable)', length(act.err.names)-2), file), act.err.names)
     return(act.err)
   }
