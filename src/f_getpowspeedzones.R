@@ -264,6 +264,10 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   # remove suunto watches
   hr_vs_all <- hr_vs_all %>% 
     filter(device_brand_id != 23)
+  # check if the athlete had only suunto watches, so hr_vs_all would be empty
+  if (dim(hr_vs_all)[1] == 0){
+    return(ath.info)
+  }
   
   # save(hr_vs_all,file='kk.hr_vs_all.rda') # debug
   
