@@ -27,6 +27,7 @@ source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
 # sel.athletes <- c("NAME")
 sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
 sel.athletes <- c(sel.athletes, read.table("data/list_athletes_2107.txt",stringsAsFactors = F)$V1)
+sel.athletes <- c(sel.athletes, read.table("data/list_athletes_2201.txt",stringsAsFactors = F)$V1)
 # some athletes are duplicated on the july update
 sel.athletes <- unique(sel.athletes)
 
@@ -35,7 +36,8 @@ ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
 ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
 ph_folders4 <- list.dirs(list.dirs('../../2107_TRAININGPEAKS', recursive=F), recursive = F)
-all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3, ph_folders4)
+ph_folders5 <- list.dirs(list.dirs('../../2201_UPDATE', recursive=F), recursive = F)
+all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3, ph_folders4, ph_folders5)
 
 
 ## -----------------------------------------------------------------------------
@@ -55,6 +57,11 @@ if (file.exists('data/athlete_maxHR.txt')){
 if (file.exists('data/athlete_maxHR_2107.txt')){
   lab.maxHR <- rbind(lab.maxHR,
                      setNames(read.table('data/athlete_maxHR_2107.txt'),c('name','maxHR')))
+}
+# add jan 2022 update
+if (file.exists('data/athlete_maxHR_2201.txt')){
+  lab.maxHR <- rbind(lab.maxHR,
+                     setNames(read.table('data/athlete_maxHR_2201.txt'),c('name','maxHR')))
 }
 # get the most updated one, for duplicates
 lab.maxHR <- lab.maxHR %>% 
@@ -77,6 +84,14 @@ if (file.exists('data/athlete_goldVT_2107.csv')){
                         mutate(gold.VT1=round(gold.VT1,2),
                                gold.VT2=round(gold.VT2,2)))
 }
+
+# add jan 2022 update
+if (file.exists('data/athlete_goldVT_2201.csv')){
+       lab.goldVT <- rbind(lab.goldVT, read.csv('data/athlete_goldVT_2201.csv') %>%
+                                mutate(gold.VT1=round(gold.VT1,2),
+                                       gold.VT2=round(gold.VT2,2)))
+}
+
 # get the most updated one, for duplicates
 lab.goldVT <- lab.goldVT %>% 
   arrange(ath.name) %>% 
@@ -101,6 +116,14 @@ if (file.exists('data/athlete_testdates_2107.csv')){
                                          col_types = cols("c",col_date(format="%d/%m/%y"),
                                                           col_date(format="%d/%m/%y"))))
 }
+# add jan 2022 update
+if (file.exists('data/athlete_testdates_2201.csv')){
+  ath.testdates <- rbind(ath.testdates,
+                         readr::read_csv('data/athlete_testdates_2201.csv',
+                                         col_types = cols("c",col_date(format="%d/%m/%Y"),
+                                                          col_date(format="%d/%m/%Y"))))
+}
+
 # get the first one, as the second one is only 1 test date update
 ath.testdates <- ath.testdates %>% 
   arrange(name) %>% 
@@ -123,9 +146,9 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1) #not to overload your computer
 registerDoParallel(cl)
 
- writeLines(c("###############################",
-               "##   TRAININGPEAKS PROJECT   ##",
-               "###############################"))
+writeLines(c("###############################",
+             "##   TRAININGPEAKS PROJECT   ##",
+             "###############################"))
 for (athlete in sel.athletes){
   writeLines(c("","###############################",
                "Calculating maxHR and HR/Power/Speed correlations...",
@@ -208,14 +231,21 @@ for (athlete in sel.athletes){
                "Processing all fit files...",
                paste0("Working with athlete ",athlete),""))
   
-  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
-  if (length(str_split(sel.dirs,"/")[[1]]) == 5){
-    sel.dirs <- list.dirs(sel.dirs)
-  } else {
-    sel.dirs <- list.dirs(sel.dirs,recursive=F)
-    sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
-  }
-  files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
+  # edit 211020, check all folders, not just the first one!
+  sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, athlete)]
+  # comment 220125, better to get all type of files and process on the function itself, and add recursive option below
+  # sel.dirs <- NULL
+  # for (sel.dir in sel.dirs.tmp) {
+  #   # if (length(str_split(sel.dir,"/")[[1]]) == 5){
+  #   #   sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
+  #   # } else {
+  #   #   sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
+  #   #   sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
+  #   # }
+  # }
+  files <- list.files(sel.dirs.tmp, pattern="*.*", recursive=T, full.names=T)
+  # files <- list.files(sel.dirs.tmp, pattern="*.*", full.names = TRUE)
+  # files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
@@ -274,25 +304,33 @@ all.activities <- tpeaks.all %>%
 all.activities <- type.convert(all.activities, as.is=T)
 
 # get duplicated activities based on time, etc
-dup.sessions <- rbind(dup.sessions,all.activities %>%
-  group_by(ath.id,date,start_time) %>% 
-  arrange(-total_dist.km, .by_group=T) %>%
-  mutate(id=row_number(),source=first(file)) %>%
-  ungroup() %>%
-  mutate_if(is.factor, as.character) %>%
-  filter(id > 1) %>%
-  mutate(reason="repeated activity") %>%
-  select(ath.id,file,source,reason))
+dup.sessions <- rbind(dup.sessions, all.activities %>%
+                        group_by(ath.id, date, start_time) %>% 
+                        # mutate device_brand_id so 0s are 9999 and do not interfere with sorting in next step
+                        mutate(device_brand_id = ifelse(device_brand_id == 0, 9999, device_brand_id)) %>% 
+                        # arrange by device_brand_id (so garmin would always be higher)
+                        arrange(device_brand_id, -total_dist.km, .by_group=T) %>%
+                        # arrange(-total_dist.km, .by_group=T) %>%
+                        mutate(id=row_number(),source=first(file)) %>%
+                        ungroup() %>%
+                        mutate_if(is.factor, as.character) %>%
+                        filter(id > 1) %>%
+                        mutate(reason="repeated activity") %>%
+                        select(ath.id, file, source, reason))
 
 # unique activities
 all.activities <- all.activities %>%
-  group_by(ath.id,date,start_time) %>%
-  arrange(-total_dist.km, .by_group=T) %>% 
-  mutate(id=row_number(),source=first(file)) %>%
+  group_by(ath.id, date, start_time) %>%
+  # mutate device_brand_id so 0s are 9999 and do not interfere with sorting in next step
+  mutate(device_brand_id = ifelse(device_brand_id == 0, 9999, device_brand_id)) %>% 
+  # arrange by device_brand_id (so garmin would always be higher)
+  arrange(device_brand_id, -total_dist.km, .by_group=T) %>%
+  # arrange(-total_dist.km, .by_group=T) %>%% 
+  mutate(id=row_number(), source=first(file)) %>%
   ungroup() %>%
   mutate_if(is.factor, as.character) %>%
   filter(id == 1) %>% 
-  select(-source,-id)
+  select(-source, -id)
 
 
 ## -----------------------------------------------------------------------------

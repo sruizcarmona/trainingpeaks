@@ -27,9 +27,11 @@ library(scales)
 ############################################################################################################
 
 get.hr_vs_all <- function(f,maxHR) {
-  # add gpx support
-  if (str_detect(f,".gpx")){
+  # add gpx support and tcx support
+  if (str_detect(f,"\\.gpx|\\.GPX")){
     fitdata <- try(create.fitdata_from_gpx(f),silent=T) 
+  } else if (str_detect(f,"\\.tcx|\\.TCX")) {
+    fitdata <- try(create.fitdata_from_tcx(f),silent=T) 
   } else {
     fitdata <- try(read.fit(f),silent=T)
   }
@@ -51,11 +53,16 @@ get.hr_vs_all <- function(f,maxHR) {
   }
   # if heart rate is not present, skip file as there is no use
   if (!'heart_rate' %in% names(fitdata$record)){
+    # cat(paste0("File: ", f, " does not have HR data - skipping... \n")) # debug
     return(NULL)
   }
   # if there is no power/speed record, save hr but leave sport as NA to filter later
   if (is.null(fitdata$record$power) & is.null(fitdata$record$speed)){
-    sport <- NA
+    if(is.null(fitdata$record$enhanced_speed)){
+      sport <- NA
+    } else {
+      fitdata$record$speed <- fitdata$record$enhanced_speed
+    }
   }
   # mark sport as NA if NA in heart_rate/power/speed > than 50% (but keep HR) (discard if HR==NA > 0.5)
   if (sum(fitdata$record$heart_rate == 0,na.rm=T) / length(fitdata$record$heart_rate) > 0.5){
@@ -145,7 +152,7 @@ get.hr_vs_all <- function(f,maxHR) {
   hva.act$duration.min <- if (is.null(fitdata$session$total_timer)) {round((last(fitdata$record$timestamp)-first(fitdata$record$timestamp))/60,2)} else {round(fitdata$session$total_timer_time/60,2)}
   hva.act$total_dist.km <- if(is.null(fitdata$session$total_distance)) {round(last(fitdata$record$distance/1000),2)} else {round(fitdata$session$total_distance/1000,2)}
   hva.act$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
-  hva.act$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else {NA}
+  hva.act$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else if (!is.null(fitdata$session$device_brand_id)){fitdata$session$device_brand_id} else {NA}
   hva.act$device_product_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
   hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
@@ -205,14 +212,16 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   } else {
     labmaxHR <- TRUE
   }
-  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
-  if (length(str_split(sel.dirs,"/")[[1]]) == 5){
-    sel.dirs <- list.dirs(sel.dirs)
-  } else {
-    sel.dirs <- list.dirs(sel.dirs,recursive=F)
-    sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
-  }
-  files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
+  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)]
+  # if (length(str_split(sel.dirs,"/")[[1]]) == 5){
+  #   sel.dirs <- list.dirs(sel.dirs)
+  # } else {
+  #   sel.dirs <- list.dirs(sel.dirs,recursive=F)
+  #   sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
+  # }
+  # files <- list.files(sel.dirs, pattern="*.*", full.names = TRUE)
+  files <- list.files(sel.dirs, pattern="*.*", recursive=T, full.names=T)
+  #files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
   # hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
   #                         power.cor=character(), speed.cor=character(),sport=character(),
   #                         # maxhr=character(),
@@ -224,9 +233,9 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   #                         stringsAsFactors=FALSE) 
   start <- Sys.time()
   hr_vs_all <- foreach (file=files,.combine=rbind,
-                        .packages=c("dplyr", "fit","stringr","zoo","splines"),
-                        .export=c("get.hr_vs_all","smooth.data","get.date_GARMIN")) %dopar% {
-    temp <- get.hr_vs_all(file,maxHR)
+                        .packages=c("dplyr", "fit","stringr","zoo","splines", "xml2", "XML", "tidyr", "geosphere"),
+                        .export=c("get.hr_vs_all","smooth.data","get.date_GARMIN", ls(globalenv()))) %dopar% {
+    temp <- get.hr_vs_all(file, maxHR)
     temp
   }
   rownames(hr_vs_all) <- NULL
@@ -237,7 +246,11 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   
   # check if hr_vs_all contains any rows, otherwise don't do anything below these lines and return ath.info.
   # NO HR DATA
+  # assign maxHR to labmaxHR in that case
   if (is.null(hr_vs_all)){
+    ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR),
+                                                        maxHR,
+                                                        NA_integer_)
     return(ath.info)
   }
   
@@ -276,7 +289,7 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
   ath.info$tangent.maxHR[ath.info$name == athlete] <- hrmax.athlete
   ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
-                                                      max(maxHR,hrmax.athlete),
+                                                      max(maxHR, hrmax.athlete, na.rm=T),
                                                       hrmax.athlete)
   hrmax.athlete <- ath.info$maxHR[ath.info$name == athlete]
   
