@@ -32,20 +32,29 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x) {
     mutate(deriv = (y - lag(y))/ (x - lag(x)),
            yinterc = y - x*deriv,
            xinterc = round(-yinterc/deriv,0),
-           xinterc_diff = xinterc - lag(xinterc, default = 0)) %>% 
+           xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc), # fix errors in xinterc exactly 0
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n = 10)) %>% 
     rowwise() %>% 
     mutate(error_act = sum(myact$hrmax > xinterc),
-           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100
+           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
+           error_perc5 = ifelse(error_perc > 5, error_perc, 0)
     ) %>% 
     ungroup() %>% 
-    mutate(rank_error = dense_rank(desc(error_act * error_perc)),
-           rank_xintercdiff = dense_rank(desc(abs(xinterc_diff))),
-           score_error = (rank_error - min(rank_error, na.rm=T)) / (max(rank_error, na.rm=T) - min(rank_error, na.rm=T)),
-           score_deriv = -(deriv-max(deriv, na.rm = T)) / (max(deriv,na.rm=T) - min(deriv, na.rm=T)),
-           score_xintercdiff = (rank_xintercdiff - min(rank_xintercdiff, na.rm=T)) / (max(rank_xintercdiff, na.rm=T) - min(rank_xintercdiff, na.rm=T)),
-           score_all = score_error * w_e + score_deriv * w_d + score_xintercdiff * w_x,
-           score_all_rank = ntile(desc(score_all), n())
-    )
+    mutate(rank_error = dense_rank(error_act * error_perc), 
+           # better to have a scaled score instead of a ranked normalization
+           # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
+           score_error = scale(error_act * (error_perc)) + abs(min(scale(error_act * (error_perc)), na.rm=T)),
+           score_error_perc = scale(error_perc5) + abs(min(scale(error_perc5), na.rm=T)),
+           rank_deriv = dense_rank(desc(deriv)),
+           # same with derivative, no point on ranking, better to leave it scaled as it is
+           score_deriv = scale(-deriv),
+           # the "xintercdiff" is a bit tricky, as I implemented it to avoid correcting high error rates by going to flat derivative
+           # this way, if the section of the curve is a highly variable one, such as maximums or minimums, it gets penalized
+           # I will also score is as a scale
+           rank_xintercdiff = dense_rank(abs(xinterc_diff)),
+           score_xintercdiff = abs(scale(xinterc_diff))**2) %>%
+    mutate(optim = -score_error_perc * w_e + score_deriv * w_d - score_xintercdiff * w_x)
+  
   return(mypdata)
 }
 
@@ -84,7 +93,8 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
 
   # pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   # updated process 210818
-  pdata <- process_maxhr_activity(maxhr_per_activity.140, w_e = 0.3, w_d = 1, w_x = 1)
+  # weights obtained in "optim" folder with an optimization of 20 individuals with a grid search approach
+  pdata <- process_maxhr_activity(maxhr_per_activity.140, w_e = 5, w_d = 1, w_x = 0)
   best_row <- pdata %>% filter(score_all_rank == 1 )
   yinterc <- best_row$yinterc
   xinterc <- best_row$xinterc
