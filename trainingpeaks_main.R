@@ -414,8 +414,32 @@ for (i in ath.info.test$ath.id) {
       t = "test2"
       t.date = tests[test_i]
     }
-    for (period in c("prevweek","prevmonth","prevyear")){
-      days=case_when(period=="prevweek" ~ 7, period=="prevmonth" ~ 35, period=="prevyear" ~ 364, TRUE ~ 0)
+    for (period in c("prevweek",
+                     "prev1months",
+                     "prev2months",
+                     "prev3months",
+                     "prev4months",
+                     "prev5months",
+                     "prev6months",
+                     "prev7months",
+                     "prev8months",
+                     "prev9months",
+                     "prev10months",
+                     "prev11months",
+                     "prevyear")){
+      days=case_when(period=="prevweek" ~ 7,
+                     period=="prev1months" ~ 28,            # 4 weeks
+                     period=="prev2months" ~ 56,            # 4 weeks
+                     period=="prev3months" ~ 91,            # 5 weeks
+                     period=="prev4months" ~ 119,           # 4 weeks
+                     period=="prev5months" ~ 147,           # 4 weeks
+                     period=="prev6months" ~ 182,           # 5 weeks
+                     period=="prev7months" ~ 210,           # 4 weeks
+                     period=="prev8months" ~ 238,           # 4 weeks
+                     period=="prev9months" ~ 273,           # 5 weeks
+                     period=="prev10months" ~ 301,          # 4 weeks 
+                     period=="prev11months" ~ 329,          # 4 weeks
+                     period=="prevyear" ~ 364, TRUE ~ 0)    # 5 weeks
       # get all activities for the the period
       sport.period.activities <- ath.activities %>% 
         filter(as.Date(as.character(date),"%Y%m%d") < t.date,
