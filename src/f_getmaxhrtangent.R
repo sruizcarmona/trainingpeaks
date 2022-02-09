@@ -26,11 +26,10 @@ library(scales)
 ## output pdata for plotting below
 ############################################################################################################
 
-process_maxhr_activity <- function(athid, myact, w_e, w_d, w_x, nlag = 10, d2f = 0.1) {
+process_maxhr_activity <- function(myact, w_e, w_d, w_x, nlag = 10, d2f = 0.1) {
   myres <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
     select(x,y) %>% 
-    mutate(ath.id = athid,
-           deriv = (y - lag(y))/ (x - lag(x)),
+    mutate(deriv = (y - lag(y))/ (x - lag(x)),
            # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
            deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
            score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
