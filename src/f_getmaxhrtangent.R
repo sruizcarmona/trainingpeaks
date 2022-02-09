@@ -26,14 +26,18 @@ library(scales)
 ## output pdata for plotting below
 ############################################################################################################
 
-process_maxhr_activity <- function(myact, w_e, w_d, w_x) {
-  mypdata <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+process_maxhr_activity <- function(athid, myact, w_e, w_d, w_x, nlag = 10, d2f = 0.1) {
+  myres <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
     select(x,y) %>% 
-    mutate(deriv = (y - lag(y))/ (x - lag(x)),
+    mutate(ath.id = athid,
+           deriv = (y - lag(y))/ (x - lag(x)),
+           # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
+           deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
            yinterc = y - x*deriv,
            xinterc = round(-yinterc/deriv,0),
            xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc), # fix errors in xinterc exactly 0
-           xinterc_diff = xinterc - lag(xinterc, default = 0, n = 10)) %>% 
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n = nlag)) %>% 
     rowwise() %>% 
     mutate(error_act = sum(myact$hrmax > xinterc),
            error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
@@ -43,7 +47,7 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x) {
     mutate(rank_error = dense_rank(error_act * error_perc), 
            # better to have a scaled score instead of a ranked normalization
            # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
-           score_error = scale(error_act * (error_perc)) + abs(min(scale(error_act * (error_perc)), na.rm=T)),
+           score_error = scale(error_act * (error_perc5)) + abs(min(scale(error_act * (error_perc5)), na.rm=T)),
            score_error_perc = scale(error_perc5) + abs(min(scale(error_perc5), na.rm=T)),
            rank_deriv = dense_rank(desc(deriv)),
            # same with derivative, no point on ranking, better to leave it scaled as it is
@@ -53,9 +57,8 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x) {
            # I will also score is as a scale
            rank_xintercdiff = dense_rank(abs(xinterc_diff)),
            score_xintercdiff = abs(scale(xinterc_diff))**2) %>%
-    mutate(optim = -score_error_perc * w_e + score_deriv * w_d - score_xintercdiff * w_x)
-  
-  return(mypdata)
+    mutate(optim = (-score_error * w_e + score_deriv * w_d - score_xintercdiff * w_x) * score_deriv2)
+  return(myres)
 }
 
 
@@ -94,8 +97,8 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   # pdata = ggplot_build(ggplot(maxhr_per_activity.140) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
   # updated process 210818
   # weights obtained in "optim" folder with an optimization of 20 individuals with a grid search approach
-  pdata <- process_maxhr_activity(maxhr_per_activity.140, w_e = 5, w_d = 1, w_x = 0)
-  best_row <- pdata %>% filter(score_all_rank == 1 )
+  pdata <- process_maxhr_activity(maxhr_per_activity.140, w_e = 83, w_d = 1, w_x = 0, nlag = 10, d2f = 0.15)
+  best_row <- pdata %>% arrange(-optim) %>% filter(row_number() == 1)
   yinterc <- best_row$yinterc
   xinterc <- best_row$xinterc
   tan_slope <- best_row$deriv
