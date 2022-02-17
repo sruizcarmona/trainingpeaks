@@ -24,9 +24,9 @@ library(splines)
 ## output same vector with the data points smoothed with a window w
 ############################################################################################################
 
-smooth.data <- function(data,w){
+smooth.data <- function(data,w,r=2){
   sm <- rollapply(data,width=w,function(...) {mean(...,na.rm=T)},partial=T,align="center")
-  return(round(sm,2))
+  return(round(sm,r))
 }
 
 ############################################################################################################

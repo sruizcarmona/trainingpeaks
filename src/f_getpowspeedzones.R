@@ -127,7 +127,7 @@ get.hr_vs_all <- function(f,maxHR) {
   # check how pow and hr are correlated and store r2 to filter later
   if (!is.na(sport) & !is.null(fitdata$record$power) & !all(is.na(hva.act$power))){
     knots <- quantile(hva.act$hr, p = c(0.5))
-    lm_fit <- lm (power ~ bs(hr,knots=knots,degree = 3), data = hva.act)
+    lm_fit <- lm (power ~ splines::bs(hr,knots=knots,degree = 3), data = hva.act)
     hva.act$power.cor <- round(summary(lm_fit)$r.squared ,2)
     hva.act$power.cor[hva.act$power.cor == "NaN"] <- NA
   } else {
@@ -169,7 +169,7 @@ get.hr_vs_all <- function(f,maxHR) {
 
 get.power_zones <- function(data,hrmax) {
   knots <- quantile(data$hr, p = c(0.5))
-  lm_fit <- lm (power ~ bs(hr,knots=knots,degree = 3), data = data)
+  lm_fit <- lm (power ~ splines::bs(hr,knots=knots,degree = 3), data = data)
   cor <- round(summary(lm_fit)$r.squared,2)
   hr.zones <- quantile(c(0:hrmax),probs=c(seq(0,1,by=0.1),0.83,0.94))
   pow.zones <- round(predict(lm_fit,newdata = data.frame(hr=hr.zones)),2)
