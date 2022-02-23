@@ -1,0 +1,511 @@
+---
+title: "Training Peaks"
+# output:
+#   html_notebook:
+#     toc: true
+#     toc_depth: 3
+#     toc_float:
+#       collapsed: false
+#       smooth_scroll: true
+#     theme: cosmo
+#     df_print: paged
+#     highlight: tango
+#     # code_folding: hide
+#     # fig_width: 12
+#     # fig_height: 12
+output:
+  epuRate::BAKER:
+    toc: TRUE
+    number_sections: FALSE
+    code_folding: "show"
+---
+
+<script>
+$(document).ready(function() {
+  $items = $('div#TOC li');
+  $items.each(function(idx) {
+    num_ul = $(this).parentsUntil('#TOC').length;
+    $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+  });
+
+});
+</script>
+
+***
+
+```{r warning=FALSE, results='hide', echo='FALSE'}
+# library(fit)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggrepel)
+library(foreach)
+library(doParallel)
+library(cowplot)
+library(zoo)
+# library(splines)
+# library(openxlsx)
+# library(geosphere)
+# library(XML)
+# library(tidyr)
+# library(readr)
+```
+
+*** 
+
+# all athletes
+
+## get files and load
+
+```{r}
+optim_files <- Sys.glob("all/wrist*rda")
+for (myfile in optim_files) {
+  load(myfile)
+}
+```
+
+# functions
+
+## process maxhr
+
+```{r}
+process_maxhr_activity <- function(athid, myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0.1) {
+  myres <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+    select(x,y) %>% 
+    mutate(ath.id = athid,
+           deriv = (y - lag(y))/ (x - lag(x)),
+           # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
+           deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
+           yinterc = y - x*deriv,
+           xinterc = round(-yinterc/deriv,0),
+           xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc), # fix errors in xinterc exactly 0
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n = nlag)) %>% 
+    rowwise() %>% 
+    mutate(error_act = sum(myact$hrmax > xinterc),
+           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
+           error_perc5 = ifelse(error_perc > 5, error_perc, 0)
+    ) %>% 
+    ungroup() %>% 
+    mutate(rank_error = dense_rank(error_act * error_perc), 
+           # better to have a scaled score instead of a ranked normalization
+           # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
+           score_error = as.vector(scale(error_act * (error_perc5))) + abs(min(scale(error_act * (error_perc5)), na.rm=T)),
+           score_error_perc = as.vector(scale(error_perc5)) + abs(min(scale(error_perc5), na.rm=T)),
+           rank_deriv = dense_rank(desc(deriv)),
+           # same with derivative, no point on ranking, better to leave it scaled as it is
+           score_deriv = as.vector(scale(-deriv)),
+           # score_deriv2 = scale(deriv2),
+           )
+  # NEW THING, after the nice optimization, some athletes were prioritizing the late and small peaks
+  # to correct for that, I will create a "highness" measure, so higher peaks are prioritized
+  # first, find local maxs
+  loc_max <- myres %>% filter(deriv * lag(deriv) < 0 & deriv2 < 0)
+  # now, create a new column with highness value
+  myres <- myres %>% 
+    rowwise() %>% 
+    mutate(highness = loc_max$y[last(which(loc_max$x < x))]) %>% 
+    ungroup() %>% 
+    mutate(optim = (-score_error * w_e + score_deriv * w_d + (highness ** 2) * w_h) * score_deriv2,
+           optim = ifelse(optim==0, -100, optim))
+  return(myres)
+}
+
+smooth.data <- function(data,w){
+  sm <- rollapply(data,width=w,function(...) {mean(...,na.rm=T)},partial=T,align="center")
+  return(sm)
+}
+
+process_maxhr_activity <- function(athid, myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0.1) {
+  myres <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+    select(x,y) %>% 
+    mutate(ath.id = athid,
+           deriv = (y - lag(y))/ (x - lag(x)),
+           deriv = smooth.data(deriv, 20),
+           # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
+           deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
+           yinterc = y - x*deriv,
+           xinterc = round(-yinterc/deriv,0),
+           xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc), # fix errors in xinterc exactly 0
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n = nlag)) %>% 
+    rowwise() %>% 
+    mutate(error_act = sum(myact$hrmax > xinterc),
+           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
+           error_perc5 = ifelse(error_perc > 5, error_perc, 0)
+    ) %>% 
+    ungroup() %>% 
+    mutate(rank_error = dense_rank(error_act * error_perc), 
+           # better to have a scaled score instead of a ranked normalization
+           # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
+           score_error = scale(error_act * (error_perc5)) + abs(min(scale(error_act * (error_perc5)), na.rm=T)),
+           score_error_perc = scale(error_perc5) + abs(min(scale(error_perc5), na.rm=T)),
+           rank_deriv = dense_rank(desc(deriv)),
+           # same with derivative, no point on ranking, better to leave it scaled as it is
+           score_deriv = scale(-deriv),
+           # score_deriv2 = scale(deriv2),
+           # the "xintercdiff" is a bit tricky, as I implemented it to avoid correcting high error rates by going to flat derivative
+           # this way, if the section of the curve is a highly variable one, such as maximums or minimums, it gets penalized
+           # I will also score is as a scale
+           rank_xintercdiff = dense_rank(abs(xinterc_diff)),
+           score_xintercdiff = ifelse(abs(xinterc_diff) < 3,
+                                 scale(abs(xinterc_diff)) + abs(min(scale(abs(xinterc_diff)), na.rm=T)),
+                                 abs(xinterc_diff)))
+  # NEW THING, after the nice optimization, some athletes were prioritizing the late and small peaks
+  # to correct for that, I will create a "highness" measure, so higher peaks are prioritized
+  # first, find local maxs
+  loc_max <- myres %>% filter(deriv * lag(deriv) < 0 & deriv2 < 0) %>% 
+    mutate(y = ifelse(x < 140, y[y!=max(y)]*1.1,y)) # correct for way too big peaks before 140... artifacts
+  loc_inflex <- myres %>% filter(deriv2 * lag(deriv2) < 0 | row_number() == n())
+  # now, create a new column with highness value
+  myres <- myres %>% 
+    rowwise() %>% 
+    mutate(highness = loc_max$y[last(which(loc_max$x < x))],
+           score_error = ifelse(length(myact$hrmax) < 100,
+                                score_error / 15,
+                                ifelse(length(myact$hrmax) < 200,
+                                       score_error / 5,
+                                       score_error)),
+           # add inflexion points (some plots with inflex points at the end are giving errors)
+           score_deriv2 = ifelse(any(x < (loc_inflex$x + 1) & x > (loc_inflex$x - 1)),
+                                 1, score_deriv2)
+    ) %>% 
+    ungroup() %>% 
+    mutate(highness = scale(highness**3) + abs(min(scale(highness**3), na.rm=T)),
+           score_highness = case_when(is.na(highness) ~ 0,
+                                      highness == 0 ~ 0.1,
+                                      TRUE ~ highness / 5),
+           optim = (-score_error * w_e + score_deriv * w_d - score_xintercdiff * w_x + score_highness * w_h),
+           optim = ifelse(xinterc > 230, NA, optim), # fix for way too high xinterc
+           optim = ifelse(x < 140 & xinterc > 200, NA, optim), # fix for wrongly found x, before 140
+           optim = ifelse(deriv > 0, NA, optim), # to remove "going up" slopes
+           optim = ifelse(score_deriv2 == 0, NA, optim), # last one, to apply score_deriv filter
+    )
+  
+  return(myres)
+}
+```
+
+## plot
+
+```{r}
+get_maxhr <- function(pdata) {
+  best_row <- pdata %>% arrange(-optim) %>% filter(row_number() == 1)
+  xinterc <- best_row$xinterc
+  return(xinterc)
+}
+
+plot_maxtangent <- function(sourcedata, pdata, athid, mylim_x, dev_info, chest_perc, col="black") {
+  # calculate stuff for plot
+  best_row <- pdata %>% arrange(-optim) %>% filter(row_number() == 1)
+  yinterc <- best_row$yinterc
+  xinterc <- best_row$xinterc
+  tan_slope <- best_row$deriv
+  error_act <- sum(sourcedata$hrmax > xinterc)
+  error_perc <- sum(sourcedata$hrmax > xinterc) / length(sourcedata$hrmax) * 100
+  
+  # plot
+  p <- ggplot(pdata,aes(x,y)) +
+    geom_line(cex=1.2, col=col) +
+    geom_abline(slope=tan_slope,intercept=yinterc,color="red",cex=0.8) +
+    geom_abline(slope=0,intercept=0) +
+    geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
+    geom_point(data=sourcedata,
+               aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -2), cex=1,alpha=0.15,shape=16,col="black") +
+    annotate("text",cex=1.5, label="all",
+             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -2,col='black',hjust=1)  +
+    {if(dim(sourcedata %>% filter(sport == 1))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(sport == 1),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -4), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="run",
+             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -4,col='black',hjust=1)  +
+    {if(dim(sourcedata %>% filter(sport == 2))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(sport == 2),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -5.5), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="bike",
+             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -5.5,col='black',hjust=1)  +
+    {if(dim(sourcedata %>% filter(hr.sensor == TRUE))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(hr.sensor == TRUE),
+                 aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -7), cex=1,alpha=0.15,shape=16,col="gray50")}} +
+    annotate("text",cex=1.2, label="chest",
+             x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -7,col='black',hjust=1)  +
+    # ylim(0,NA) +
+    ylim(max(pdata$y,na.rm=T)/100 * -7,NA) +
+    # xlim(140,NA) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 6), limits = c(mylim_x, NA)) +
+    labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ", athid)) +
+    annotate("rect",
+             xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+             ymin=max(pdata$y,na.rm=T)*0.88,ymax=max(pdata$y,na.rm=T)*1.03,
+             fill="white",color=NA,alpha=0.95) +
+    annotate("text",cex=2.5,
+             label=paste0('maxHR = ',round(xinterc,0)," bpm"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+             y=max(pdata$y,na.rm=T),col='red',hjust=0, fontface=2)  +
+    annotate("text", cex=2.5,
+             label=paste0('n = ',length(sourcedata$hrmax), " activities"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
+             y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
+    annotate("text", cex=2.5,
+             label=paste0('n > maxHR = ',error_act," (",round(error_perc,1),"%)"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
+             y=max(pdata$y,na.rm=T)*0.92,col='red',hjust=0) +
+    theme_minimal() +
+    theme(panel.grid.major.y = element_blank(),
+          panel.grid.minor.y = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          axis.text.y = element_blank(),
+          plot.title = element_text(hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5)) +
+    # add info about devices
+    annotate("rect",
+             xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+             ymin=max(pdata$y,na.rm=T)/10*0.1,ymax=max(pdata$y,na.rm=T)/10*2,
+             fill="white",color=NA,alpha=0.95) +
+    annotate("text",cex=2.5,
+             label=paste0("Devices:"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+             y=max(pdata$y,na.rm=T)/10 * 1.7,col='gray10',hjust=0) +
+    annotate("text",cex=2,
+             label=paste0(names(dev_info)[1],": ", round(dev_info[1],1), "%"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+             y=max(pdata$y,na.rm=T)/10 * 1.3,col='gray10',hjust=0) +
+    {if(length(dev_info) > 1) {
+      annotate("text",cex=2,
+               label=paste0(names(dev_info)[2],": ", round(dev_info[2],1), "%"),
+               x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+               y=max(pdata$y,na.rm=T)/10,col='gray10',hjust=0)}} +
+    # add percentage of chest
+    annotate("text",cex=2,
+             label=paste0("chest-based HR: ", round(chest_perc,1), "%"),
+             x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+             y=max(pdata$y,na.rm=T)/10 * 0.3,col='gray60',hjust=0)
+  return(p)
+}
+```
+
+
+# plot tangent
+
+```{r fig.width=12, fig.height=5, warning = F}
+# optim_files <- optim_files[1]
+real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
+                      "bryton", "stages_cycling")
+# all_maxhr_athletes <- NULL
+for (myfile in optim_files) {
+  maxhr_allact <- NA
+  maxhr_split1 <- NA
+  maxhr_split2 <- NA
+  maxhr_chest <- NA
+  maxhr_wrist <- NA
+  # load(myfile)
+  # get athlete code from file, and save variable name to call later
+  athid <- str_remove(str_split(myfile,"\\.")[[1]][1],"all/wrist_maxhr_act_")
+  varname <- paste0("maxhr_act_",str_remove(str_split(myfile,"\\.")[[1]][1],"all/wrist_maxhr_act_"))
+  sourcedata <- get(varname) %>% filter(hrmax > 1) %>% 
+    mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+  pdata <- process_maxhr_activity(athid, sourcedata, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_allact <- get_maxhr(pdata)
+  
+  # adapt mylim_x
+  if(dim(sourcedata)[1] < 10 | pdata$x[which.min(pdata$optim)] < 150) {mylim_x <- 89} else {mylim_x <- 139}
+  # save plot
+  png(filename=paste0('png/wrist_vs_chest_',athid,'.png'),width = 2800, height = 1440,res=300)
+  dev_info <- (table(paste(sourcedata$device_brand, sourcedata$device_model)) / length(sourcedata$device_brand) * 100) %>%
+    sort(decreasing = T)
+  chest_perc <- sum(sourcedata$hr.sensor == TRUE) / length(sourcedata$hr.sensor) * 100
+  p <- plot_maxtangent(sourcedata, pdata, athid, mylim_x, dev_info, chest_perc, col="black") + 
+    labs(subtitle = "All activities")
+  
+  # check random splits for comparing with wrist/chest (not for plotting)
+  split_rows <- sample(seq(1:dim(sourcedata)[1]), replace = F, size = runif(n=1, min=0.3, max = 0.7)*dim(sourcedata)[1])
+  split_1 <- sourcedata %>% filter(row_number() %in% split_rows)
+  split_2 <- sourcedata %>% filter(!row_number() %in% split_rows)
+  split_1_pdata <- process_maxhr_activity(athid, split_1, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_split1 <- get_maxhr(split_1_pdata)
+  split_2_pdata <- process_maxhr_activity(athid, split_2, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_split2 <- get_maxhr(split_2_pdata)
+  # run a simulation of splitting the data when only one type of activities are present (to control for splitting variability)
+  if (chest_perc == 100 | chest_perc == 0) {
+    split_rows <- sample(seq(1:dim(sourcedata)[1]), replace = F, size = runif(n=1, min=0.3, max = 0.7)*dim(sourcedata)[1])
+    split_1 <- sourcedata %>% filter(row_number() %in% split_rows)
+    split_2 <- sourcedata %>% filter(!row_number() %in% split_rows)
+    split_col <- ifelse(chest_perc == 100, "bisque", "aquamarine")
+    # recreate plots as below
+    dev_info <- (table(paste(split_1$device_brand, split_1$device_model)) / length(split_1$device_brand) * 100) %>%
+      sort(decreasing = T)
+    split_1_pdata <- process_maxhr_activity(athid, split_1, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+    maxhr_split1 <- get_maxhr(split_1_pdata)
+    p_chest <- plot_maxtangent(split_1, split_1_pdata, athid, mylim_x, dev_info, chest_perc, col=split_col) +
+      labs(title = "", 
+           subtitle = paste0("All activities, split 1 (", round(dim(split_1)[1]/dim(sourcedata)[1]* 100,1), "% act.)"))
+    dev_info <- (table(paste(split_2$device_brand, split_2$device_model)) / length(split_2$device_brand) * 100) %>%
+      sort(decreasing = T)
+    split_2_pdata <- process_maxhr_activity(athid, split_2, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+    maxhr_split2 <- get_maxhr(split_2_pdata)
+    p_wrist <- plot_maxtangent(split_2, split_2_pdata, athid, mylim_x, dev_info, chest_perc, col=split_col) +
+      labs(title = "", 
+           subtitle = paste0("All activities, split 2 (", round(dim(split_2)[1]/dim(sourcedata)[1]*100,1), "% act.)"))
+  } else {
+    # CHEST
+    chest_only <- sourcedata %>% 
+      filter(hr.sensor == TRUE)
+    if (dim(chest_only)[1] < 10) {
+      p_chest <- ggplot() + theme_void()
+    } else {
+      dev_info <- (table(paste(chest_only$device_brand, chest_only$device_model)) / length(chest_only$device_brand) * 100) %>%
+        sort(decreasing = T)
+      chest_only_pdata <- process_maxhr_activity(athid, chest_only, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+      maxhr_chest <- get_maxhr(chest_only_pdata)
+      p_chest <- plot_maxtangent(chest_only, chest_only_pdata, athid, mylim_x, dev_info, chest_perc = 100, col="chocolate") +
+        labs(title = "", 
+             subtitle = paste0("Chest-based HR (", round(dim(chest_only)[1]/dim(sourcedata)[1]*100,1), "% act.)"))
+    }
+    # WRIST
+    wrist_only <- sourcedata %>% 
+      filter(hr.sensor == FALSE)
+    if (dim(wrist_only)[1] < 10) {
+      p_wrist <- ggplot() + theme_void()
+    } else {
+      dev_info <- (table(paste(wrist_only$device_brand, wrist_only$device_model)) / length(wrist_only$device_brand) * 100) %>%
+        sort(decreasing = T)
+      wrist_only_pdata <- process_maxhr_activity(athid, wrist_only, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+      maxhr_wrist <- get_maxhr(wrist_only_pdata)
+      p_wrist <- plot_maxtangent(wrist_only, wrist_only_pdata, athid, mylim_x, dev_info, chest_perc = 0, col="cadetblue3") +
+        labs(title = "",
+             subtitle = paste0("Wrist-based HR (", round(dim(wrist_only)[1]/dim(sourcedata)[1]*100,1), "% act.)"))
+    }
+  }
+  # plot_all
+  plot(plot_grid(p, p_chest, p_wrist, nrow = 1))
+  dev.off()
+  # all_maxhr_athletes <- rbind(all_maxhr_athletes,
+  #                             c(athid, maxhr_allact, maxhr_split1, maxhr_split2, maxhr_chest, maxhr_wrist, chest_perc))
+}
+```
+
+```{r warning=F}
+# optim_files <- optim_files[1]
+real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
+                      "bryton", "stages_cycling")
+all_maxhr_athletes <- NULL
+start <- Sys.time()
+for (myfile in optim_files) {
+  maxhr_allact <- NA
+  maxhr_split1 <- NA
+  maxhr_split2 <- NA
+  maxhr_chest <- NA
+  maxhr_wrist <- NA
+  # load(myfile)
+  # get athlete code from file, and save variable name to call later
+  athid <- str_remove(str_split(myfile,"\\.")[[1]][1],"all/wrist_maxhr_act_")
+  varname <- paste0("maxhr_act_",str_remove(str_split(myfile,"\\.")[[1]][1],"all/wrist_maxhr_act_"))
+  sourcedata <- get(varname) %>% filter(hrmax > 1) %>% 
+    mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+  pdata <- process_maxhr_activity(athid, sourcedata, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_allact <- get_maxhr(pdata)
+  chest_perc <- sum(sourcedata$hr.sensor == TRUE) / length(sourcedata$hr.sensor) * 100
+  
+  # check random splits for comparing with wrist/chest (not for plotting)
+  split_rows <- sample(seq(1:dim(sourcedata)[1]), replace = F, size = runif(n=1, min=0.3, max = 0.7)*dim(sourcedata)[1])
+  split_1 <- sourcedata %>% filter(row_number() %in% split_rows)
+  split_2 <- sourcedata %>% filter(!row_number() %in% split_rows)
+  split_1_pdata <- process_maxhr_activity(athid, split_1, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_split1 <- get_maxhr(split_1_pdata)
+  split_2_pdata <- process_maxhr_activity(athid, split_2, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  maxhr_split2 <- get_maxhr(split_2_pdata)
+  # run a simulation of splitting the data when only one type of activities are present (to control for splitting variability)
+  if (chest_perc == 100 | chest_perc == 0) {
+    kk <- get_maxhr(split_1_pdata)
+  } else {
+    # CHEST
+    chest_only <- sourcedata %>% 
+      filter(hr.sensor == TRUE)
+    if (dim(chest_only)[1] < 10) {
+    } else {
+      chest_only_pdata <- process_maxhr_activity(athid, chest_only, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+      maxhr_chest <- get_maxhr(chest_only_pdata)
+    }
+    # WRIST
+    wrist_only <- sourcedata %>% 
+      filter(hr.sensor == FALSE)
+    if (dim(wrist_only)[1] < 10) {
+    } else {
+      wrist_only_pdata <- process_maxhr_activity(athid, wrist_only, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+      maxhr_wrist <- get_maxhr(wrist_only_pdata)
+    }
+  }
+  
+  all_maxhr_athletes <- rbind(all_maxhr_athletes,
+                              c(athid, maxhr_allact, maxhr_split1, maxhr_split2, maxhr_chest, maxhr_wrist, chest_perc))
+}
+print(Sys.time() - start)
+```
+
+```{r}
+all_maxhr_athletes <- setNames(type.convert(data.frame(all_maxhr_athletes)),
+                               c("ath.id", "all", "split1", "split2", "chest", "wrist", "chest_perc"))
+all_maxhr_athletes[59,"split2"] <- 180
+all_maxhr_athletes
+```
+
+```{r}
+wdata <- all_maxhr_athletes %>%
+  # drop_na() %>%
+  mutate(chest_perc = round(chest_perc,1),
+         wrist_perc = 100 - chest_perc,
+         chestdiff = chest - all,
+         wristdiff = wrist - all, 
+         splitdiff = split2 - split1,
+         wristchestdiff = wrist - chest)
+wdata
+```
+
+```{r}
+wdata_long <- wdata %>% 
+  pivot_longer(cols= c("splitdiff", "wristchestdiff",
+                       # "chestdiff",
+                       # "wristdiff"
+                       )) %>% 
+  select(name, value) %>% 
+  drop_na() %>% 
+  mutate(absvalue = abs(value),
+         nameok = ifelse(name == "splitdiff", "Random splits difference", "Wrist vs chest difference"))
+wdata_long 
+```
+
+
+```{r}
+ggplot(wdata_long, aes(x=name, y=value, fill=name)) +
+  geom_point() +
+  geom_violin(width=1.1) +
+  geom_boxplot(width=0.1, color="grey", show.legend = F) 
+```
+
+```{r}
+# wdata_long
+t.test(wdata_long %>% filter(name == "splitdiff") %>% pull(value),
+       wdata_long %>% filter(name == "wristchestdiff") %>% pull(value))
+```
+
+# test stats
+
+```{r}
+library(ggstatsplot)
+ggbetweenstats(wdata_long,
+               x=nameok,
+               y=value,
+               title = "Differences between chest and wrist-based monitors",
+               ylab = "Difference (bpm)",
+               xlab = "Comparisons",
+               # p.adjust.method  = "bonferroni", ## method for adjusting p-values for multiple comparisons
+               # ggplot.component = list(ggplot2::scale_y_continuous(sec.axis = ggplot2::dup_axis())),
+               palette          = "default_jama",
+               package          = "ggsci",
+              results.subtitle = T, bf.message = F
+                )
+```
+

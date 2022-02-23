@@ -1,0 +1,880 @@
+---
+title: "Training Peaks"
+# output:
+#   html_notebook:
+#     toc: true
+#     toc_depth: 3
+#     toc_float:
+#       collapsed: false
+#       smooth_scroll: true
+#     theme: cosmo
+#     df_print: paged
+#     highlight: tango
+#     # code_folding: hide
+#     # fig_width: 12
+#     # fig_height: 12
+output:
+  epuRate::BAKER:
+    toc: TRUE
+    number_sections: FALSE
+    code_folding: "show"
+---
+
+<script>
+$(document).ready(function() {
+  $items = $('div#TOC li');
+  $items.each(function(idx) {
+    num_ul = $(this).parentsUntil('#TOC').length;
+    $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+  });
+
+});
+</script>
+
+***
+
+```{r warning=FALSE, results='hide', echo='FALSE'}
+# library(fit)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggrepel)
+library(foreach)
+library(doParallel)
+library(zoo)
+# library(splines)
+# library(openxlsx)
+# library(geosphere)
+# library(XML)
+# library(tidyr)
+# library(readr)
+```
+
+*** 
+
+# all athletes
+
+## get files and load
+
+```{r}
+optim_files <- Sys.glob("optim*rda")
+optim_files <- Sys.glob("all/optim*.rda")
+optim_files <- Sys.glob("all/wrist*.rda")
+for (myfile in optim_files) {
+  load(myfile)
+}
+```
+
+
+## check correct values
+
+```{r}
+# current_values <- c(194, 197, 198, 204,
+#                     190, 201, 206, 185, 188,
+#                     203, 195, 209, 200, 175, 172,
+#                     158, 184, 164, 174, 216)
+# correct_values <- c(194, 197, 198, 204,
+#                     190, 201, 206, 186, 188,
+#                     203, 197, 209, 200, 197, 168,
+#                     158, 187, 169, 196, 218)
+# lab_values <- c(193, 190, 190, 203,
+#                 187, 194, 197, 174, 182,
+#                 190, 192, 191, 189, 167, 158,
+#                 173, 190, 142, 187, 227)
+# ref_values <- setNames(data.frame(str_remove(unlist(purrr::map(str_split(optim_files,"\\."),1)),"optim_maxhr_act_"),
+#                                   current_values, correct_values, lab_values, stringsAsFactors = F),
+#                        c("athlete", "tangent", "ideal", "lab"))
+# ref_values
+# ref_values.test <- ref_values[c(1,2,14,19),]
+# optim_files <- optim_files[c(1,2,14,20)]
+```
+
+## get all athletes 
+
+```{r}
+# ## I manually checked every plot and saved the ideal result, so we can train and test the best parameters
+# load('../out/rdas/tpeaks_newzones.220207.rda')
+# maxhr_values <- tp.newzones %>%
+#   select(1:5)
+# # manually check which values would be ideal
+# ideal_values <- c(200,194,197,198,204,190,201,206,186,188, 203,188,195, NA, NA,198,208,207,192,201, # 20
+#                   194,209,200,190,197,195,178,192,199,188, 208,198,210, NA,179,183,168,182,169,205, # 40
+#                   158, NA,168,185,169,180,170, NA, NA,183, 178,173,176,175,170,170,170,170,189,192, # 60
+#                   196,196,188,187,196,196,195,194,190,206, 196,193,169,186,193,196,195,192,188,182, # 80
+#                   173, NA,187,167, NA,175,179,169,168,188,  NA,179,164,172, NA,167,139,169,189,183, # 100
+#                   189,181,176,163,152,182,196,182,176,184, 182,183,184,183,184,195,180,178, NA, NA, # 120
+#                    NA,166,187,167,172,167,190, NA,176,180,  NA, NA,170,193,157,161,190,198,190,194, # 140
+#                   190, NA,196,218,172,191,169,184, NA,170, 185,186)
+# maxhr_values$ideal <- ideal_values
+# maxhr_values <- maxhr_values %>%
+#   select(ath.id, name, lab = lab.maxHR, ideal) %>%
+#   filter(!is.na(ideal))
+# save(maxhr_values, file = "maxhr_values_reference.rda")
+all_files <- Sys.glob('all/optim*rda')
+load("maxhr_values_reference.rda")
+maxhr_values[maxhr_values$ath.id == "BA_096","ideal"] <- 154
+maxhr_values[maxhr_values$ath.id == "BA_109","ideal"] <- 162
+maxhr_values[maxhr_values$ath.id == "BA_139","ideal"] <- 144
+# maxhr_values[maxhr_values$ath.id == "BA_084","ideal"] <- 182
+maxhr_values[maxhr_values$ath.id == "BA_125","ideal"] <- 163
+maxhr_values[maxhr_values$ath.id == "BA_036","ideal"] <- 195
+# maxhr_values[maxhr_values$ath.id == "BA_151","ideal"] <- 168
+maxhr_values[maxhr_values$ath.id == "BA_105","ideal"] <- 145
+maxhr_values[maxhr_values$ath.id == "BA_110","ideal"] <- 175
+maxhr_values[maxhr_values$ath.id == "BA_122","ideal"] <- 183
+maxhr_values[maxhr_values$ath.id == "BA_051","ideal"] <- 168
+maxhr_values[maxhr_values$ath.id == "BA_146","ideal"] <- 186
+maxhr_values
+```
+
+```{r}
+# smooth deriv, as it creates spikes for the the d2f filter and it's a mess
+library(zoo)
+smooth.data <- function(data,w){
+  sm <- rollapply(data,width=w,function(...) {mean(...,na.rm=T)},partial=T,align="center")
+  return(sm)
+}
+```
+
+
+## calculate for everyone and plot
+
+```{r fig.width=12, warning=F}
+maxhr_all <- NULL
+# optim_files <- Sys.glob("optim*rda")
+optim_files <- Sys.glob("all/wrist*rda")
+# sel_athletes <- 
+sel_athletes <- c(1,2, 11, 13, 94, 116, 96, 88, 115, 151, 73, 122, 99, 78, 27)
+# sel_athletes <- seq(1,12) + 12*11
+# sel_athletes <- c(94, 116, 96, 88)
+sel_athletes <- c(122,61)
+sel_athletes <- c(122,116,151,112, 110,146)
+sel_athletes <- c(9,26,46,101,104,134,140,144)
+sel_athletes.code <- paste0("BA_",str_pad(sel_athletes,3,pad="0"))
+optim_files <- optim_files[grepl(paste0(sel_athletes.code, collapse = "|"), optim_files)]
+w_e <- 80
+w_d <- 1
+w_x <- 4
+w_h <- 0
+nlag <- 10
+d2f <- 0.2
+# optim_files <- optim_files[c(1,2,11,19)]
+# optim_files <- optim_files[c(11,14)]
+
+real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
+                      "bryton", "stages_cycling")
+
+for (myfile in optim_files) {
+  # load(myfile)
+  # get athlete code from file, and save variable name to call later
+  wrist_only <- FALSE
+  athid <- str_remove(str_split(str_remove(myfile, "all/"),"\\.")[[1]][1],"wrist_maxhr_act_")
+  varname <- paste0("maxhr_act_",str_remove(str_split(str_remove(myfile, "all/"),"\\.")[[1]][1],"wrist_maxhr_act_"))
+  # get plot data to calculate derivative et al
+  myact <- get(varname) %>% 
+    filter(hrmax > 1) %>% 
+    mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor)) %>% 
+    filter(hr.sensor == TRUE)
+  # if wrist is more than 70%, do not remove them
+  if((dim(myact)[1] / dim(get(varname))[1]) < 30){
+    myact <- get(varname) %>% 
+      filter(hrmax > 1) %>% 
+      mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+      mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+    wrist_only <- TRUE
+  }
+  tmp <- ggplot_build(ggplot(myact) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+    select(x,y) %>%
+    mutate(ath.id = athid,
+           deriv = (y - lag(y)) / (x - lag(x)),
+           deriv = smooth.data(deriv, 20),
+           deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
+           yinterc = y - x*deriv,
+           xinterc = round(-yinterc/deriv,0),
+           xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc),
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n=nlag)) %>% 
+    rowwise() %>% 
+    mutate(error_act = sum(myact$hrmax > xinterc),
+           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
+           error_perc5 = ifelse(error_perc > 5, error_perc, 0)
+    ) %>% 
+    ungroup() %>% 
+    mutate(
+      # rank_error = dense_rank(error_act * error_perc), 
+      # better to have a scaled score instead of a ranked normalization
+      # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
+      score_error = scale(error_act * (error_perc5)) + abs(min(scale(error_act * (error_perc5)), na.rm=T)),
+      score_error_perc = scale(error_perc5) + abs(min(scale(error_perc5), na.rm=T)),
+      # rank_deriv = dense_rank(desc(deriv)),
+      # same with derivative, no point on ranking, better to leave it scaled as it is
+      score_deriv = scale(-deriv),
+      # the "xintercdiff" is a bit tricky, as I implemented it to avoid correcting high error rates by going to flat derivative
+      # this way, if the section of the curve is a highly variable one, such as maximums or minimums, it gets penalized
+      # I will also score is as a scale
+      # rank_xintercdiff = dense_rank(abs(xinterc_diff)),
+      score_xintercdiff = ifelse(abs(xinterc_diff) < 3,
+                                 scale(abs(xinterc_diff)) + abs(min(scale(abs(xinterc_diff)), na.rm=T)),
+                                 abs(xinterc_diff)))
+  # NEW THING, after the nice optimization, some athletes were prioritizing the late and small peaks
+  # to correct for that, I will create a "highness" measure, so higher peaks are prioritized
+  # first, find local maxs
+  loc_max <- tmp %>% filter(deriv * lag(deriv) < 0 & deriv2 < 0) %>% 
+    mutate(y = ifelse(x < 140, y[y!=max(y)]*1.1,y)) # correct for way too big peaks before 140... artifacts
+  loc_inflex <- tmp %>% filter(deriv2 * lag(deriv2) < 0 | row_number() == n())
+  # now, create a new column with highness value
+  tmp <- tmp %>% 
+    rowwise() %>% 
+    mutate(highness = loc_max$y[last(which(loc_max$x < x))],
+           score_error = ifelse(length(myact$hrmax) < 100,
+                                score_error / 15,
+                                ifelse(length(myact$hrmax) < 200,
+                                       score_error / 5,
+                                       score_error)),
+           # add inflexion points (some plots with inflex points at the end are giving errors)
+           score_deriv2 = ifelse(any(x < (loc_inflex$x + 1) & x > (loc_inflex$x - 1)),
+                                 1, score_deriv2)
+           ) %>% 
+    ungroup() %>% 
+    mutate(highness = scale(highness**3) + abs(min(scale(highness**3), na.rm=T)),
+           score_highness = case_when(is.na(highness) ~ 0,
+                                      highness == 0 ~ 0.1,
+                                      TRUE ~ highness / 5),
+           optim = (-score_error * w_e + score_deriv * w_d - score_xintercdiff * w_x + score_highness * w_h),
+           optim = ifelse(xinterc > 230, NA, optim), # fix for way too high xinterc
+           optim = ifelse(x < 140 & xinterc > 200, NA, optim), # fix for wrongly found x, before 140
+           optim = ifelse(deriv > 0, NA, optim), # to remove "going up" slopes
+           optim = ifelse(score_deriv2 == 0, NA, optim), # last one, to apply score_deriv filter
+    )
+  maxhr_all <- rbind(maxhr_all,tmp)
+}
+# maxhr_all <- maxhr_all %>% drop_na()
+anno <- maxhr_all %>% 
+  group_by(ath.id) %>% 
+  arrange(-optim) %>% 
+  filter(row_number() == 1) %>%
+  left_join(maxhr_values, by = "ath.id")
+# anno 
+
+plot_maxhrall_test(maxhr_all, optim_zoom=1000)
+# testid <- "BA_151"
+# maxhr_all %>% filter(ath.id == testid)
+# ggplot(maxhr_all %>% filter(ath.id == testid) %>% mutate(score_error = ifelse(score_error > 1, NA, score_error)), aes(x=x)) +
+#   # ylim(c(-2,2)) +
+#   geom_line(aes(y=y*30)) +
+#   geom_line(aes(y=deriv2*100, col="deriv2")) +
+#   # geom_line(aes(y=optim/1000, col="optim"), size=1.5) +
+#   geom_line(aes(y=score_highness, col="highness"), size=2) +
+#   geom_line(aes(y=score_deriv, col="score_deriv")) +
+#   geom_line(aes(y=-score_error*5, col="score_error")) +
+#   geom_line(aes(y=xinterc_diff/40000, col="xintercdiff")) +
+#   geom_line(aes(y=score_deriv2, col="deriv2"))
+# maxhr_all %>% filter(ath.id == testid) %>% arrange(-optim) %>% mutate(n=row_number()) %>% group_by(xinterc) %>%
+# filter(row_number() == 1)
+
+```
+
+```{r fig.width=20, warning=F}
+plot_maxhrall_test <- function(maxhr_all, optim_zoom=20000) {
+  anno <- maxhr_all %>%
+    group_by(ath.id) %>%
+    arrange(-optim) %>%
+    filter(row_number() == 1) %>%
+    left_join(maxhr_values, by = "ath.id")
+
+  p <- ggplot(maxhr_all,aes(x=x)) +
+    # ylim(c(-0.03,0.05)) +
+    scale_y_continuous(limits = c(-0.03, NA)) +
+    xlim(c(120, 250)) +
+    geom_line(aes(y=y), col="black", size=2) +
+    geom_line(aes(y=score_deriv/80), col="red", size=1) +
+    geom_line(aes(y=deriv2*50), col="darkred", size=1) +
+    geom_line(aes(y=score_deriv2/50), col="maroon", size=1) +
+    # geom_line(aes(y=-deriv*5), col="red", size=1) +
+    # geom_line(aes(y=xinterc/20000), col="blue") +
+    # geom_line(aes(y=score_xintercdiff/60), col="orange", size=1) +
+    # geom_line(aes(y=error_perc/4000), col="purple", size=2) +
+    # geom_line(aes(y = (rank_error + rank_deriv + rank_xintercdiff)/30000), col="green", size=1.5) +
+    geom_line(aes(y=score_error/60), col="purple", size=1) +
+    geom_line(aes(y=optim/optim_zoom), col = "darkgreen", size=2) +
+    facet_wrap(~ ath.id) +
+    # geom_hline(data = anno,
+    #              aes(yintercept = q10*50, col="q10"), size = 1.5) +
+    # geom_hline(data = anno,
+    #              aes(yintercept = q05*50, col="q05"), size = 1.5) +
+    # geom_hline(data = anno,
+    #              aes(yintercept = q15*50, col="q15"), size = 1.5) +
+    # geom_hline(data = anno,
+    #              aes(yintercept = q20*50, col="q20"), size = 1.5) +
+    geom_segment(data=anno,
+                 aes(x=x,y=y,xend=xinterc,yend=0),color="blue",size=1.4) +
+    geom_text(data = anno,
+              aes(label=xinterc, x=xinterc, y=0), hjust=0, color="blue", cex=12) +
+    geom_text(data = anno,
+              aes(label=ideal, x=200, y=y), hjust=0, color="red", cex=12)
+  return(p)
+}
+# plot_maxhrall_test(maxhr_all, optim_zoom=100)
+# plot_maxhrall_test(tmp,optim_zoom = 10000)
+```
+
+
+
+## test plot
+
+```{r fig.width=20, warning=FALSE}
+# ggplot(maxhr_all,aes(x=x)) +
+#   ylim(c(-0.05,0.1)) +
+#   xlim(c(140, 210)) +
+#   geom_line(aes(y=y)) +
+#   geom_line(aes(y=deriv*5), col="red") +
+#   geom_line(aes(y=xinterc/20000), col="blue") +
+#   geom_line(aes(y=xinterc_diff/10000), col="cyan") +
+#   facet_wrap(~ ath.id) +
+#   geom_segment(data=anno,
+#                aes(x=x,y=y,xend=xinterc,yend=0),color="blue",size=1.4) +
+#   geom_text(data = anno,
+#             aes(label=xinterc, x=xinterc, y=0), hjust=0, color="blue", cex=8) +
+#   # geom_line(aes(y=yinterc/25), col="green") +
+#   geom_line(aes(y=error_act*error_perc/100000), col="orange") +
+#   # geom_line(aes(y=error_perc/2000), col="purple") +
+#   geom_line(aes(y = - error_act*error_perc / 150000 + (-deriv)*10 - abs(xinterc_diff)/5000), col="darkgreen", size=2)
+#   # geom_line(aes(y = rank_error + rank_deriv + rank_xintercdiff), col="green", size=1.5)
+#   # scale_y_continuous(
+#   #   name = "First Axis",
+#   #   sec.axis = sec_axis( ~ . *10000, name="Second Axis")
+#   # )
+```
+
+# optimization
+
+## function 1
+
+* get maxHR from all activities and weights
+
+```{r}
+process_maxhr_activity <- function(athid, myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0.1) {
+  myres <- ggplot_build(ggplot(myact %>% filter(hrmax > 1)) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+    select(x,y) %>% 
+    mutate(ath.id = athid,
+           deriv = (y - lag(y))/ (x - lag(x)),
+           deriv = smooth.data(deriv, 20),
+           # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
+           deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
+           yinterc = y - x*deriv,
+           xinterc = round(-yinterc/deriv,0),
+           xinterc = ifelse(is.na(xinterc) | !is.finite(xinterc),999,xinterc), # fix errors in xinterc exactly 0
+           xinterc_diff = xinterc - lag(xinterc, default = 0, n = nlag)) %>% 
+    rowwise() %>% 
+    mutate(error_act = sum(myact$hrmax > xinterc),
+           error_perc = sum(myact$hrmax > xinterc)/length(myact$hrmax) * 100,
+           error_perc5 = ifelse(error_perc > 5, error_perc, 0)
+    ) %>% 
+    ungroup() %>% 
+    mutate(rank_error = dense_rank(error_act * error_perc), 
+           # better to have a scaled score instead of a ranked normalization
+           # substract 5% to error_perc so we don't mind if there is 5% error --> no difference
+           score_error = scale(error_act * (error_perc5)) + abs(min(scale(error_act * (error_perc5)), na.rm=T)),
+           score_error_perc = scale(error_perc5) + abs(min(scale(error_perc5), na.rm=T)),
+           rank_deriv = dense_rank(desc(deriv)),
+           # same with derivative, no point on ranking, better to leave it scaled as it is
+           score_deriv = scale(-deriv),
+           # score_deriv2 = scale(deriv2),
+           # the "xintercdiff" is a bit tricky, as I implemented it to avoid correcting high error rates by going to flat derivative
+           # this way, if the section of the curve is a highly variable one, such as maximums or minimums, it gets penalized
+           # I will also score is as a scale
+           rank_xintercdiff = dense_rank(abs(xinterc_diff)),
+           score_xintercdiff = ifelse(abs(xinterc_diff) < 3,
+                                 scale(abs(xinterc_diff)) + abs(min(scale(abs(xinterc_diff)), na.rm=T)),
+                                 abs(xinterc_diff)))
+  # NEW THING, after the nice optimization, some athletes were prioritizing the late and small peaks
+  # to correct for that, I will create a "highness" measure, so higher peaks are prioritized
+  # first, find local maxs
+  loc_max <- myres %>% filter(deriv * lag(deriv) < 0 & deriv2 < 0) %>% 
+    mutate(y = ifelse(x < 140, y[y!=max(y)]*1.1,y)) # correct for way too big peaks before 140... artifacts
+  loc_inflex <- myres %>% filter(deriv2 * lag(deriv2) < 0 | row_number() == n())
+  # now, create a new column with highness value
+  myres <- myres %>% 
+    rowwise() %>% 
+    mutate(highness = loc_max$y[last(which(loc_max$x < x))],
+           score_error = ifelse(length(myact$hrmax) < 100,
+                                score_error / 15,
+                                ifelse(length(myact$hrmax) < 200,
+                                       score_error / 5,
+                                       score_error)),
+           # add inflexion points (some plots with inflex points at the end are giving errors)
+           score_deriv2 = ifelse(any(x < (loc_inflex$x + 1) & x > (loc_inflex$x - 1)),
+                                 1, score_deriv2)
+    ) %>% 
+    ungroup() %>% 
+    mutate(highness = scale(highness**3) + abs(min(scale(highness**3), na.rm=T)),
+           score_highness = case_when(is.na(highness) ~ 0,
+                                      highness == 0 ~ 0.1,
+                                      TRUE ~ highness / 5),
+           optim = (-score_error * w_e + score_deriv * w_d - score_xintercdiff * w_x + score_highness * w_h),
+           optim = ifelse(xinterc > 230, NA, optim), # fix for way too high xinterc
+           optim = ifelse(x < 140 & xinterc > 200, NA, optim), # fix for wrongly found x, before 140
+           optim = ifelse(deriv > 0, NA, optim), # to remove "going up" slopes
+           optim = ifelse(score_deriv2 == 0, NA, optim), # last one, to apply score_deriv filter
+    )
+  
+  return(myres)
+}
+```
+
+
+## function 2: wrapper
+
+```{r warning = F, fig.width=6, fig.height=6}
+fitness_f <- function(w_error = 70, w_deriv = 1, w_xintercdiff = 10, w_highness = 10, nlag = 10, d2f = 0.1, plot = 0, debug=0) {
+  # if(debug == 1) {
+  #   w_error = 70
+  #   w_deriv = 1
+  #   w_xintercdiff = 10
+  #   w_highness = 10
+  #   nlag = 10
+  #   d2f = 0.1
+  #   plot = 0
+  # }
+  # optim_files <- Sys.glob("optim*rda")
+  optim_files <- Sys.glob("all/wrist*rda")
+  # optim_files <- optim_files[c(1,2,14,20)]
+  maxhr_all <- NULL
+  for (myfile in optim_files) {
+    athid <- str_remove(str_split(str_remove(myfile, "all/"),"\\.")[[1]][1],"wrist_maxhr_act_")
+    varname <- paste0("maxhr_act_", str_remove(str_split(str_remove(myfile, "all/"), "\\.")[[1]][1], "wrist_maxhr_act_"))
+    ## remove all non-chest activities, unless > 70% are wrist
+    myact <- get(varname) %>% 
+      filter(hrmax > 1) %>% 
+      mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+      mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor)) %>% 
+      filter(hr.sensor == TRUE)
+    # if wrist is more than 70%, do not remove them
+    if((dim(myact)[1] / dim(get(varname))[1]) < 0.3 | dim(myact)[1] < 10){
+      myact <- get(varname) %>% 
+        filter(hrmax > 1) %>% 
+        mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+        mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+    }
+    ##
+    tmp <- process_maxhr_activity(athid, myact, w_error, w_deriv, w_xintercdiff, w_highness, nlag, d2f)
+    maxhr_all <- rbind(maxhr_all,tmp)
+    maxhr_all <<- maxhr_all
+    # maxhr_all <<- maxhr_all %>% drop_na()
+  }
+  # theo <- setNames(data.frame(maxhr_all %>% pull(ath.id) %>% unique()), "ath.id")
+  theo <- maxhr_all %>% 
+    group_by(ath.id) %>% 
+    arrange(-optim) %>% 
+    # filter(optim_rank ==1) %>% 
+    filter(row_number() == 1) %>% 
+    select(ath.id, predicted=xinterc)
+  theo <- left_join(theo, maxhr_values, by="ath.id") %>% select(ath.id, predicted, ideal)
+  if (debug == 1) {
+    print(theo %>% mutate(diff = abs(ideal-predicted)) %>% arrange(-diff)) # debug
+  }
+  if (plot == 1) {
+    p <- ggplot(theo) +
+      geom_point(aes(x=ideal, y=predicted)) +
+      geom_text_repel(aes(x=ideal, y=predicted,
+                          label=ifelse(abs(ideal - predicted) > 2, paste0(ath.id,": ", predicted, " (", ideal,")"), "")),
+                      box.padding = 0.5) +
+      # coord_fixed() +
+      labs(title=paste0("f with: we = ", w_error ,", wd = ", w_deriv ," and wx = ", w_xintercdiff ,"."),
+           subtitle=paste0("MAE: ", sum(abs(theo$ideal - theo$predicted)))) +
+      theme(aspect.ratio=1) +
+      xlim(c(min(as.numeric(unlist(theo[,c(2,3)])), na.rm=T),
+             max(as.numeric(unlist(theo[,c(2,3)])), na.rm=T))) +
+      ylim(c(min(as.numeric(unlist(theo[,c(2,3)])), na.rm=T),
+             max(as.numeric(unlist(theo[,c(2,3)])), na.rm=T)))
+    return(p)
+  }
+  # calculate MAE
+  return(sum(abs(theo$ideal - theo$predicted), na.rm=T))
+}
+
+# fitness_f_vect <- function(x) {fitness_f(x[1],x[2],x[3])}
+# # fitness_f(w_error, w_deriv, w_xintercdiff)
+# # xinput <- c(w_error,w_deriv,w_xintercdiff)
+# # (xinput <- runif(3, 0, 1)
+# xinput <- c(0.3,1,1)
+# xinput <- c(30, 2, 200)
+# fitness_f_vect(xinput)
+# k <- fitness_f(xinput[1], xinput[2], xinput[3])
+# k
+p <- fitness_f(w_error = 80, w_deriv = 1, w_xintercdiff = 4,  w_highness = 0, nlag = 10, d2f = 0.2, plot = 1, debug = 0)
+fitness_f(w_error = 80, w_deriv = 1, w_xintercdiff = 4,  w_highness = 0, nlag = 10, d2f = 0.2, plot = 0, debug = 1); p
+```
+
+
+
+```{r fig.width=15, warning=FALSE}
+# plot_maxhrall_test(maxhr_all, optim_zoom = 300)
+# maxhr_all %>% 
+#   filter(ath.id == "BA_041") %>%
+#   group_by(ath.id) %>% 
+#   arrange(-optim) %>% 
+#   filter(row_number() < 20)
+```
+
+
+## run grid search
+
+```{r}
+# res <- NULL
+# start <- Sys.time()
+# for (w1 in seq(0,2,1)) {
+#   for (w2 in seq(0,2,1)) {
+#     for (w3 in seq(0,2,1)){
+#       res <- rbind(res, setNames(data.frame(matrix(c(w1, w2, w3, fitness_f(w1, w2, w3)), nrow=1)), c("w1", "w2", "w3", "fitness")))
+#       # print(res)
+#     }
+#   }
+# }
+# end <- Sys.time()
+# duration <- end-start
+# print(duration)
+# res
+```
+### in parallel
+
+```{r}
+# library(foreach)
+# library(doParallel)
+# cores <- detectCores()
+# cl <- makeCluster(cores[1]-1) # not to overload your computer
+# registerDoParallel(cl)
+# 
+# w_to_test <- seq(0,2,1) # 3 secs (with 4 samples)
+# w_to_test <- seq(0,10,1) # 1.1 min
+# w_to_test <- seq(0,100,1) # EST 40 min
+# w_to_test <- seq(0,20,1) # 8 min (min = 14)
+# w_to_test <- seq(0,50,2) # 1h 50min (min = 14)
+# 
+# res <- NULL
+# start <- Sys.time()
+# res <- 
+#   foreach (w1 = w_to_test, .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   foreach (w2 = w_to_test, .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   foreach (w3 = w_to_test, .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %dopar% {
+#         res.tmp <- setNames(data.frame(matrix(c(w1, w2, w3, fitness_f(w1, w2, w3)), nrow=1)),
+#                             c("w1", "w2", "w3", "fitness"))
+#         res.tmp
+#       }
+#     
+# end <- Sys.time()
+# duration <- end-start
+# print(duration)
+# save(res,file="res_kk.rda")
+# res %>% 
+#   arrange(fitness) %>% 
+#   head(100)
+# # stopCluster(cl)
+```
+
+## optimize extra
+
+```{r}
+# library(foreach)
+# library(doParallel)
+# cores <- detectCores()
+# cl <- makeCluster(cores[1]-1) # not to overload your computer
+# registerDoParallel(cl)
+# 
+# # w_to_test <- seq(0,100,2) # 1h 50min (min = 14)
+# w3 <- 10
+# nlag <- 5
+# w2 <- 1
+# w1_to_test <- c(w2 * seq(70,120,60))
+# 
+# res <- NULL
+# start <- Sys.time()
+# res <- 
+#   # foreach (w1 = w_to_test, .combine=rbind,
+#   #          .export = ls(globalenv()),
+#   #          .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   # foreach (w3 = w_to_test, .combine=rbind,
+#   #          .export = ls(globalenv()),
+#   #          .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   foreach (d2f = seq(0.15,0.25,0.1), .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   foreach (wh = seq(1, 20, 20), .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %:%
+#   foreach (w1 = w1_to_test, .combine=rbind,
+#            .export = ls(globalenv()),
+#            .packages=c("dplyr", "ggplot2", "tidyr", "stringr")) %dopar% {
+#         res.tmp <- setNames(data.frame(matrix(c(w1, w2, w3, wh, d2f, fitness_f(w1, w2, w3, wh, nlag, d2f)), nrow=1)),
+#                             c("w1", "w2", "w3", "wh", "d2f", "fitness"))
+#         res.tmp
+#       }
+#     
+# end <- Sys.time()
+# duration <- end-start
+# print(duration)
+# # save(res,file="res_kklag.rda")
+# res %>% 
+#   arrange(fitness) %>% 
+#   head(10)
+# # stopCluster(cl)
+
+### DONE! There is no improvement on the 21 MAE obtained before.
+### so will leave it with the 5,1,0 weight values for the final tpeaks pipeline
+# 77  18  4  0    9      21
+# 78  18  4  0   10      21
+# 79  18  4  2    1      21
+# 80  18  4  2    2      21
+# 81  18  4  2    3      21
+# 82  18  4  2    4      21
+# 83  18  4  2    5      21
+# 84  18  4  2    6      21
+# 85  18  4  2    7      21
+# 86  18  4  4    1      21
+# 87  18  4  4    2      21
+# 88  18  4  4    3      21
+# 89  18  4  4    4      21
+# 90  18  4  4    5      21
+# 91  18  4  4    6      21
+# 92  18  4  4    7      21
+# 93  18  4  6    1      21
+# 94  18  4  6    2      21
+# 95  18  4  6    3      21
+# 96  18  4  6    4      21
+# 97  18  4  6    5      21
+# 98  18  4  6    6      21
+# 99  18  4  8    1      21
+# 100 18  4  8    2      21
+```
+
+```{r}
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1) # not to overload your computer
+registerDoParallel(cl)
+myinput <- expand_grid(w1 = seq(30,100,2),
+                       w2 = 1, 
+                       w3 = seq(0,20,1), 
+                       wh = seq(0,20,1), 
+                       nlag = c(5,10),
+                       d2f = 0.20)
+
+res <- NULL
+start <- Sys.time()
+
+catf <- function(..., file="logkk.txt", append=TRUE){
+  cat(..., file=file, append=append)
+}
+writeLines(c(""), "logkk.txt")
+
+res <- 
+  foreach (i = seq(dim(myinput)[1]), .combine=rbind,
+           .export = ls(globalenv()),
+           .packages=c("dplyr", "ggplot2", "tidyr", "stringr", "zoo")) %dopar% {
+        w1 <- as.numeric(myinput[i,][1])
+        w2 <- as.numeric(myinput[i,][2])
+        w3 <- as.numeric(myinput[i,][3])
+        wh <- as.numeric(myinput[i,][4])
+        nlag <- as.numeric(myinput[i,][5])
+        d2f <- as.numeric(myinput[i,][6])
+        test.average.time <- as.numeric(difftime(Sys.time(), start, units = "min")) / i
+        estimated.finish.min <- round(test.average.time * (dim(myinput)[1] - i),1)
+        catf(paste0("Run ",i, "/", dim(myinput)[1], " (", format(Sys.time(), "%X"), ") \n",
+                   "ETC in ", estimated.finish.min, " min (", round(estimated.finish.min / 60,1), " h) \n\n"))
+        res.tmp <- setNames(data.frame(matrix(c(w1, w2, w3, wh, nlag, d2f, fitness_f(w1, w2, w3, wh, nlag, d2f)), nrow=1)),
+                            c("w1", "w2", "w3", "wh", "nlag", "d2f", "fitness"))
+        res.tmp
+      }
+    
+end <- Sys.time()
+duration <- end-start
+duration_per_test <- as.numeric(duration / dim(myinput)[1])
+print(duration)
+print(duration)
+
+catf(paste0(duration, "\n",
+            round(duration_per_test*60,3), "seconds per test \n"))
+save(res, file="kkres.rda")
+```
+
+
+# check results
+
+```{r}
+# fitness_f_plot(5,1,0)
+# fitness_f_plot(14,2,34)
+
+```
+
+```{r fig.width=20, warning=F}
+# fitness_f(5,1,0,1)
+# plot_maxhrall_test(maxhr_all, 1000)
+```
+
+
+
+
+
+# OPTIM
+
+```{r}
+# library(RSNNS)
+```
+
+
+```{r}
+# r <- optim(c(1,0.1,0.3), fitness_f_vect, method = "L-BFGS-B",
+#            lower = rep(0, 3), upper = rep(1,3))
+# r <- optim(c(1,0.1,0.3), fitness_f_vect, method = "BFGS")
+# r
+# xinput
+```
+
+```{r}
+# g  <- function(x1, x2)
+#     log((x1^2+x2-5)^2+(x1+x2^2-3)^2+x1^2-1.60644366086443841)
+# x1 <- seq(-5, 5, length.out=100)
+# x2 <- seq(-5, 5, length.out=100)
+# g_vectorised <- function(x12) g(x12[1], x12[2])
+# # random starting point with coordinates in [-5, 5]
+# (x12_init <- runif(2, -5, 5))
+# (res <- optim(x12_init, g_vectorised, method="BFGS"))
+```
+
+
+```{r}
+# ggplot(maxhr_all %>% filter(ath.id == "BA_023"),aes(x=x)) +
+#   ylim(c(-0.05,0.1)) +
+#   xlim(c(140, 210)) +
+#   geom_line(aes(y=y)) +
+#   geom_line(aes(y=deriv*5), col="red") +
+#   geom_line(aes(y=xinterc/20000), col="blue") +
+#   geom_line(aes(y=xinterc_diff/10000), col="cyan") +
+#   facet_wrap(~ ath.id) +
+#   # geom_line(aes(y=yinterc/25), col="green") +
+#   geom_line(aes(y=error_act*error_perc/100000), col="orange") +
+#   # geom_line(aes(y=error_perc/2000), col="purple") +
+#   geom_line(aes(y = - error_act*error_perc / 150000 + (-deriv)*10 - abs(xinterc_diff)/5000), col="darkgreen", size=2)
+#   # scale_y_continuous(
+#   #   name = "First Axis",
+#   #   sec.axis = sec_axis( ~ . *10000, name="Second Axis")
+#   # )
+```
+
+
+
+```{r}
+# load("optim_maxhr_act_BA_001.rda")
+# maxhr_act_BA_001
+# ggplot_build(ggplot(maxhr_act_BA_001) + stat_density(aes(x=hrmax),bw=3))$data[[1]] %>% 
+#   select(x,y) %>% 
+#   mutate(ath.id )
+```
+
+
+
+===========================================
+
+create function to validate
+
+```{r}
+# get_optimal_maxHR <- function(myinput, w_err, w_deriv, w_xinterdiff) {
+#   mydata = ggplot_build(ggplot(myinput %>% filter(hrmax > 140)) + stat_density(aes(x=hrmax),bw=3))$data[[1]]
+#
+#   mydata <- mydata %>%
+#     select(x,y) %>%
+#     mutate(deriv = (y - lag(y))/ (x - lag(x)),
+#            yinterc = y - x*deriv,
+#            xinterc = if_else(deriv >= 0, NA_real_, round(-yinterc/deriv,0)),
+#            xinterc_diff = xinterc - lag(xinterc, default = 0)) %>%
+#     rowwise() %>%
+#     mutate(error_act = sum(myinput$hrmax > xinterc),
+#            error_perc = sum(myinput$hrmax > xinterc)/length(myinput$hrmax) * 100
+#     ) %>% 
+#     ungroup() %>% 
+#     mutate(optim = - error_act*error_perc / w_err + abs(deriv) * w_deriv - abs(xinterc_diff) / w_xinterdiff,
+#            optim_rank = dense_rank(desc(optim))) 
+#   # return(mydata)
+#   return(mydata$xinterc[which.max(mydata$optim)]) 
+# }
+# 
+# get_optimal_maxHR(maxhr_per_activity, 150000, 10, 5000)
+```
+
+```{r}
+# f <- function(x1, x2, x3) {get_optimal_maxHR(maxhr_per_activity, x1, x2, x3) - 184}
+# f_vect <- function(x) {get_optimal_maxHR(maxhr_per_activity, x[1], x[2], x[3]) - 184}
+# f_plot <- function(x) {
+#   point(x[1], x[2], col=2, pch=3)
+#   get_optimal_maxHR(maxhr_per_activity, x[1], x[2], x[3]) - 184
+# }
+# 
+# x1 <- seq(0, 200001, length.out=1000000)
+# x2 <- seq(0, 100, length.out=10000)
+# x3 <- seq(0, 10001, length.out=100000)
+# (x <- c(runif(1,100000, 300000),
+#        runif(1,1, 100),
+#        runif(1,1, 50000)))
+# 
+# 
+# contour(x[1], x[2], y, nlevels=25)
+# r  <- optim(x, f, method = "BFGS")
+# r
+```
+
+
+```{r}
+# f <- function(x) {get_optimal_maxHR(maxhr_per_activity, x[1], x[2], x[3]) - 184}
+# # f <- function(x) 2*(x[1]-1)^2 + 5*(x[2]-3)^2 + 10
+# r <- optim(c(10000, 1, 10000), f, method = "CG")
+# r$convergence == 0
+# r$par
+# r$value
+# r
+```
+
+
+
+
+```{r}
+# gradientDesc <- function(x, y, learn_rate, conv_threshold, n, max_iter) {
+#   plot(x, y, col = "blue", pch = 20)
+#   m <- runif(1, 0, 1)
+#   c <- runif(1, 0, 1)
+#   yhat <- m * x + c
+#   MSE <- sum((y - yhat) ^ 2) / n
+#   converged = F
+#   iterations = 0
+#   while(converged == F) {
+#     ## Implement the gradient descent algorithm
+#     m_new <- m - learn_rate * ((1 / n) * (sum((yhat - y) * x)))
+#     c_new <- c - learn_rate * ((1 / n) * (sum(yhat - y)))
+#     m <- m_new
+#     c <- c_new
+#     yhat <- m * x + c
+#     MSE_new <- sum((y - yhat) ^ 2) / n
+#     if(MSE - MSE_new <= conv_threshold) {
+#       abline(c, m) 
+#       converged = T
+#       return(paste("Optimal intercept:", c, "Optimal slope:", m))
+#     }
+#     iterations = iterations + 1
+#     if(iterations > max_iter) { 
+#       abline(c, m) 
+#       converged = T
+#       return(paste("Optimal intercept:", c, "Optimal slope:", m))
+#     }
+#   }
+# }
+# attach(mtcars)
+# gradientDesc(disp, mpg, 0.0000293, 0.001, 32, 2500000)
+```
+
