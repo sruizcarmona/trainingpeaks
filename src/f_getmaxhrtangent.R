@@ -104,7 +104,6 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0
 ############################################################################################################
 
 get.maxhr_tangent <- function(hr_vs_all,ath.code) {
-  mylim_x <- NULL
   if (is.null(hr_vs_all)){
     return (0)
   }
@@ -126,30 +125,45 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   maxhr_per_activity.140 <- maxhr_per_activity %>% 
     filter(hrmax > 1) # 11FEB meeting addition (down again from 140 to 1 on FEB22, as it is wrong)
 
-  # weights obtained in "optim" folder with an optimization of 150 individuals with a grid search approach
-  pdata <- process_maxhr_activity(maxhr_per_activity.140, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
-  # some cases with very few activities with >140, so in case there are less than 10, I will use the whole dataset
-  if(dim(maxhr_per_activity.140)[1] < 10 | pdata$x[which.max(pdata$optim)] < 150) {
-    maxhr_per_activity.140 <- maxhr_per_activity
-    #change limits for plotting later
-    mylim_x <- 89
+  sourcedata <- maxhr_per_activity %>% 
+    filter(hrmax > 1) %>% 
+    mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor)) %>% 
+    filter(hr.sensor == TRUE)
+  wrist_removed <- TRUE
+  
+  # if wrist is more than 70%, do not remove them
+  if((dim(sourcedata)[1] / dim(maxhr_per_activity)[1]) < 0.3 | dim(sourcedata)[1] < 10){
+    sourcedata <- maxhr_per_activity %>% 
+      filter(hrmax > 1) %>% 
+      mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
+      mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+    wrist_removed <- FALSE
   }
-  # if(dim(sourcedata)[1] < 10 | pdata$x[which.min(pdata$optim)] < 150) {mylim_x <- 89} else {mylim_x <- 139}
   
-  
+  # weights obtained in "optim" folder with an optimization of 150 individuals with a grid search approach
+  pdata <- process_maxhr_activity(sourcedata, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+
   best_row <- pdata %>% arrange(-optim) %>% filter(row_number() == 1)
   yinterc <- best_row$yinterc
   xinterc <- best_row$xinterc
   tan_slope <- best_row$deriv
-  error_act <- sum(maxhr_per_activity$hrmax > xinterc)
-  error_perc <- sum(maxhr_per_activity$hrmax > xinterc) / length(maxhr_per_activity$hrmax) * 100
-  # add chest and device info
-  chest_perc <- sum(maxhr_per_activity$hr.sensor == TRUE) / length(maxhr_per_activity$hr.sensor) * 100
-  dev_info <- (table(paste(maxhr_per_activity$device_brand, maxhr_per_activity$device_model)) / length(maxhr_per_activity$device_brand) * 100) %>%
-    sort(decreasing = T)
+  error_act <- sum(sourcedata$hrmax > xinterc)
+  error_perc <- sum(sourcedata$hrmax > xinterc) / length(sourcedata$hrmax) * 100
   
-  # fix mylim depending on whether there are activities with max 140 (see above)
-  if(is.null(mylim_x)) {mylim_x <- 139}
+  if(dim(sourcedata)[1] < 10 | best_row$x < 150) {mylim_x <- 89} else {mylim_x <- 139}
+  
+  # add chest and device info
+  chest_perc <- sum(sourcedata$hr.sensor == TRUE) / length(sourcedata$hr.sensor) * 100
+  dev_info <- (table(paste(sourcedata$device_brand, sourcedata$device_model)) / length(sourcedata$device_brand) * 100) %>%
+    sort(decreasing = T)
+  # colors for boxes
+  box_sum_col <- 'white'
+  box_sum_text <- 'red'
+  if(wrist_removed == F){
+    box_sum_col <- 'red'
+    box_sum_text <- 'white'
+  }
   
   # save plot
   png(filename=paste0('out/png/maxHR-',ath.code,'.png'),width = 1440, height = 1440,res=300)
@@ -158,26 +172,22 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     geom_abline(slope=tan_slope,intercept=yinterc,color="red",cex=0.8) +
     geom_abline(slope=0,intercept=0) +
     geom_vline(xintercept = xinterc,col='gray50',cex=0.5,linetype="dashed") +
-    # annotate("rect",
-    #          xmin=140,xmax=max(pdata$x,na.rm=T), 
-    #          ymin=max(pdata$y,na.rm=T)/100 * -10,ymax=0,
-    #          fill="white",color=NA) +
-    geom_point(data=maxhr_per_activity.140 %>% filter(hrmax > 140),
+    geom_point(data=sourcedata %>% filter(hrmax > mylim_x + 1),
                aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -2), cex=1,alpha=0.15,shape=16,col="black") +
     annotate("text",cex=1.5, label="all",
              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -2,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(sport == 1))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 1) %>% filter(hrmax > 140),
+    {if(dim(sourcedata %>% filter(sport == 1) %>% filter(hrmax > mylim_x + 1))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(sport == 1) %>% filter(hrmax > mylim_x + 1),
                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -4), cex=1,alpha=0.15,shape=16,col="gray50")}} +
     annotate("text",cex=1.2, label="run",
              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -4,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(sport == 2))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(sport == 2) %>% filter(hrmax > 140),
+    {if(dim(sourcedata %>% filter(sport == 2) %>% filter(hrmax > mylim_x + 1))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(sport == 2) %>% filter(hrmax > mylim_x + 1),
                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -5.5), cex=1,alpha=0.15,shape=16,col="gray50")}} +
     annotate("text",cex=1.2, label="bike",
              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -5.5,col='black',hjust=1)  +
-    {if(dim(maxhr_per_activity.140 %>% filter(hr.sensor == TRUE))[1] > 0) {
-      geom_point(data=maxhr_per_activity.140 %>% filter(hr.sensor == TRUE) %>% filter(hrmax > 140),
+    {if(dim(sourcedata %>% filter(hr.sensor == TRUE) %>% filter(hrmax > mylim_x + 1))[1] > 0) {
+      geom_point(data=sourcedata %>% filter(hr.sensor == TRUE) %>% filter(hrmax > mylim_x + 1),
                  aes(x=hrmax,y=max(pdata$y,na.rm=T)/100 * -7), cex=1,alpha=0.15,shape=16,col="gray50")}} +
     annotate("text",cex=1.2, label="chestHR",
              x=mylim_x, y=max(pdata$y,na.rm=T)/100 * -7,col='black',hjust=1)  +
@@ -186,22 +196,37 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     # xlim(140,NA) +
     scale_x_continuous(breaks = scales::pretty_breaks(n = 6), limits = c(mylim_x, NA)) +
     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
-    annotate("rect",
-             xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.35+(mylim_x+1), #to get 35% of the window
-             ymin=max(pdata$y,na.rm=T)*0.88,ymax=max(pdata$y,na.rm=T)*1.03,
-             fill="white",color=NA,alpha=0.95) +
+    {if(wrist_removed == FALSE){
+      annotate("rect",
+               xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+               ymin=max(pdata$y,na.rm=T)*0.77,ymax=max(pdata$y,na.rm=T)*1.03,
+               fill=box_sum_col,color=NA,alpha=0.85)} else {
+                 annotate("rect",
+                          xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+                          ymin=max(pdata$y,na.rm=T)*0.88,ymax=max(pdata$y,na.rm=T)*1.03,
+                          fill=box_sum_col,color=NA,alpha=0.95)}} +
+    {if(chest_perc < 30){
+      annotate("text",cex=2,
+               label='WARNING!\nWrist-based HR activities not removed: \nChest-based HR activities < 30%',
+               x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+               y=max(pdata$y,na.rm=T) *0.82,col=box_sum_text,hjust=0, fontface=2, lineheight = .93)}} +
+    {if(chest_perc > 30 & (dim(sourcedata)[1] * chest_perc / 100) < 10){
+      annotate("text",cex=2,
+               label='WARNING!\nWrist-based HR activities not removed: \nChest-based HR activities < 10',
+               x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
+               y=max(pdata$y,na.rm=T) *0.82,col=box_sum_text,hjust=0, fontface=2, lineheight = .93)}} +
     annotate("text",cex=2.5,
              label=paste0('maxHR = ',round(xinterc,0)," bpm"),
              x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1), # to get 5% of the window
-             y=max(pdata$y,na.rm=T),col='red',hjust=0, fontface = 2)  +
+             y=max(pdata$y,na.rm=T),col=box_sum_text,hjust=0, fontface = 2)  +
     annotate("text", cex=2.5,
-             label=paste0('n = ',length(maxhr_per_activity.140$hrmax), " activities"),
+             label=paste0('n = ',length(sourcedata$hrmax), " activities"),
              x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
-             y=max(pdata$y,na.rm=T)*0.96,col='red',hjust=0) +
+             y=max(pdata$y,na.rm=T)*0.96,col=box_sum_text,hjust=0) +
     annotate("text", cex=2.5,
              label=paste0('n > maxHR = ',error_act," (",round(error_perc,1),"%)"),
              x=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.02+(mylim_x+1),
-             y=max(pdata$y,na.rm=T)*0.92,col='red',hjust=0) +
+             y=max(pdata$y,na.rm=T)*0.92,col=box_sum_text,hjust=0) +
     theme_minimal() +
     theme(panel.grid.major.y = element_blank(),
           panel.grid.minor.y = element_blank(),
@@ -209,8 +234,8 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
           axis.text.y = element_blank()) +
     # add info about devices
     annotate("rect",
-             xmin=mylim_x+2,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.4+(mylim_x+1), #to get 35% of the window
-             ymin=max(pdata$y,na.rm=T)/10*0.1,ymax=max(pdata$y,na.rm=T)/10*2,
+             xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.4+(mylim_x+1), #to get 35% of the window
+             ymin=max(pdata$y,na.rm=T)/10*0.1,ymax=max(pdata$y,na.rm=T)/10*1.9,
              fill="white",color=NA,alpha=0.95) +
     annotate("text",cex=2.5,
              label=paste0("Devices:"),

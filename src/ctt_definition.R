@@ -43,3 +43,12 @@ act.err.names <- c("ath.id","date","year","month","week","start_time","duration.
 product_id <- setNames(read.table("data/product_id.tsv", sep="\t", stringsAsFactors=F), c("brand", "model", "product_id"))
 product_id$model <- tolower(product_id$model)
 brand_id <- setNames(read.table("data/manufacturer_id.tsv", sep="\t", stringsAsFactors=F), c("brand", "brand_id"))
+
+########################
+#### brands that are chest-based even if they don't say so
+########################
+real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
+                      "bryton", "stages_cycling"
+                      # "tacx", "sigmasport", "the_sufferfest", "wahoo_fitness",
+                      )
+
