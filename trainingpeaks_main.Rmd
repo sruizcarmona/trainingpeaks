@@ -74,6 +74,7 @@ source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
 source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
+source('src/f_gettcxactivity.R')
 ```
 
 ### Select athletes and directory
@@ -81,17 +82,15 @@ source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
 ```{r}
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
-sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
-sel.athletes <- c(sel.athletes, read.table("data/list_athletes_2107.txt",stringsAsFactors = F)$V1)
-# some athletes are duplicated on the july update
-sel.athletes <- unique(sel.athletes)
+athlete_covid_dates <- read.csv('data/athlete_covid_dates.csv', stringsAsFactors = F)
+sel.athletes <- athlete_covid_dates$athlete
 
 # all folders in PRO_HEART, where sel.athletes folders are located
-ph_folders1 <- list.dirs('../../2101_TRAININGPEAKS/PRO_HEART',recursive = F)
-ph_folders2 <- list.dirs(list.dirs('../../2003_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
-ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
-ph_folders4 <- list.dirs(list.dirs('../../2107_TRAININGPEAKS', recursive=F), recursive = F)
-all.dirs.PH <- c(ph_folders1, ph_folders2, ph_folders3, ph_folders4)
+ph_folders1 <- list.dirs('../COVIVAX',recursive = F)
+ph_folders2 <- list.dirs('../COVIDEX',recursive = F)
+# ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
+# ph_folders4 <- list.dirs(list.dirs('../../2107_TRAININGPEAKS', recursive=F), recursive = F)
+all.dirs.PH <- c(ph_folders1, ph_folders2)
 ```
 
 ### Load previous results
@@ -117,11 +116,13 @@ if (file.exists('data/athlete_maxHR_2107.txt')){
                      setNames(read.table('data/athlete_maxHR_2107.txt'),c('name','maxHR')))
 }
 # get the most updated one, for duplicates
-lab.maxHR <- lab.maxHR %>% 
-  arrange(name) %>% 
-  group_by(name) %>% 
-  filter(row_number()==n()) %>% 
-  ungroup()
+if(exists("lab.maxHR")){
+  lab.maxHR <- lab.maxHR %>% 
+    arrange(name) %>% 
+    group_by(name) %>% 
+    filter(row_number()==n()) %>% 
+    ungroup()
+}
 
 ####################################################
 #### gold VT
@@ -138,39 +139,24 @@ if (file.exists('data/athlete_goldVT_2107.csv')){
                                gold.VT2=round(gold.VT2,2)))
 }
 # get the most updated one, for duplicates
-lab.goldVT <- lab.goldVT %>% 
-  arrange(ath.name) %>% 
-  group_by(ath.name) %>% 
-  # mutate(i=row_number(),
-  #        n=n()) %>%
-  # filter(n==2) %>%
-  filter(row_number()==n()) %>%
-  ungroup()
+if(exists("lab.goldVT")){
+  lab.goldVT <- lab.goldVT %>% 
+    arrange(ath.name) %>% 
+    group_by(ath.name) %>% 
+    # mutate(i=row_number(),
+    #        n=n()) %>%
+    # filter(n==2) %>%
+    filter(row_number()==n()) %>%
+    ungroup()
+}
 
 ####################################################
-#### test dates
-if (file.exists('data/athlete_testdates.csv')){
-  ath.testdates <- readr::read_csv('data/athlete_testdates.csv',
-                                   col_types = cols("c",col_date(format="%d/%m/%y"),
-                                                    col_date(format="%d/%m/%y")))
-}
-# add july update
-if (file.exists('data/athlete_testdates_2107.csv')){
-  ath.testdates <- rbind(ath.testdates,
-                         readr::read_csv('data/athlete_testdates_2107.csv',
-                                         col_types = cols("c",col_date(format="%d/%m/%y"),
-                                                          col_date(format="%d/%m/%y"))))
-}
-# get the first one, as the second one is only 1 test date update
-ath.testdates <- ath.testdates %>% 
-  arrange(name) %>% 
-  group_by(name) %>% 
-  # mutate(i=row_number(),
-  #        n=n(),
-  #        nas=ifelse(is.na(test_date_2),2,1)) %>%
-  # filter(n==2) %>%
-  filter(row_number()==1) %>%
-  ungroup()
+#### covid dates
+ath.coviddates <- readr::read_csv('data/athlete_covid_dates.csv')
+ath.coviddates <- ath.coviddates %>% 
+  mutate(diagnose_date = parse_date(diagnose_date,format="%d/%m/%Y"),
+         vax_1 = parse_date(vax_1,format="%d/%m/%Y"),
+         vax_2 = parse_date(vax_2,format="%d/%m/%Y"))
 ```
 
 ***
@@ -204,14 +190,14 @@ for (athlete in sel.athletes){
   if(!exists("tp.newzones")){
     writeLines(c("Nothing loaded or previously computed...",
                  "Running everything for the first time."))
-    tp.newzones <- data.frame(name=athlete, ath.id=paste0("BA_",str_pad(1,3,pad="0")),
+    tp.newzones <- data.frame(name=athlete, ath.id=paste0("CV_",str_pad(1,3,pad="0")),
                               maxHR= NA, stringsAsFactors=FALSE)
   } else {
     # if there is no row for the athlete, create one
     if(!athlete %in% tp.newzones$name){
       writeLines(c("Unknown athlete, creating a new entry."))
       tp.newzones[nrow(tp.newzones)+1,'name'] <- athlete
-      tp.newzones$ath.id[tp.newzones$name == athlete] <- paste0("BA_",str_pad(dim(tp.newzones)[1],3,pad="0"))
+      tp.newzones$ath.id[tp.newzones$name == athlete] <- paste0("CV_",str_pad(dim(tp.newzones)[1],3,pad="0"))
     } else if (!is.na(tp.newzones$maxHR[tp.newzones$name == athlete])) {
       # if there already is a row with a not NA maxHR, the athlete has already been processed --> skip
       # if(dim(tp.newzones[tp.newzones$name == athlete,])[1] != 0
@@ -240,7 +226,7 @@ for (athlete in sel.athletes){
   # Finally, run the function to get the zones and update the tp.newzones table
   tp.newzones <- update.ath_info_with_newzones(tp.newzones, athlete, ath.maxHR)
   # also, add the new "goldVT" zones, to include in the calculation later
-  if(exists("lab.goldVT") & any(lab.goldVT$ath.name == athlete)){
+  if(exists("lab.goldVT") && any(lab.goldVT$ath.name == athlete)){
     tp.newzones$gold.vt1[tp.newzones$name == athlete] <- lab.goldVT$gold.VT1[lab.goldVT$ath.name == athlete]
     tp.newzones$gold.vt2[tp.newzones$name == athlete] <- lab.goldVT$gold.VT2[lab.goldVT$ath.name == athlete]
     # if any is 0, it means that there was an error on the calculations, so set NA for those athletes
@@ -295,16 +281,17 @@ for (athlete in sel.athletes){
   
   # edit 211020, check all folders, not just the first one!
   sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, athlete)]
-  sel.dirs <- NULL
-  for (sel.dir in sel.dirs.tmp) {
-    if (length(str_split(sel.dir,"/")[[1]]) == 5){
-      sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
-    } else {
-      sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
-      sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
-    }
-  }
-  files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
+  # sel.dirs <- NULL
+  # for (sel.dir in sel.dirs.tmp) {
+  #   # if (length(str_split(sel.dir,"/")[[1]]) == 5){
+  #   #   sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
+  #   # } else {
+  #   #   sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
+  #   #   sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
+  #   # }
+  # }
+  files <- list.files(sel.dirs.tmp, pattern="*.*", full.names = TRUE)
+  # files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
@@ -313,7 +300,7 @@ for (athlete in sel.athletes){
   tp.athlete <- NULL
   tp.athlete <- foreach (file=files, .combine=rbind,
                          # .export=c("get.act_info_from_fitdata","smooth.data","onerow.df","get.date_GARMIN"),
-                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines","geosphere","XML","tidyr")) %dopar% {
+                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines","geosphere","XML","tidyr", "xml2")) %dopar% {
     temp.tp.athlete <- process.fitfile(file, ath.id)
     temp.tp.athlete
   }
@@ -459,7 +446,7 @@ ath.full.info
 add new calculations for test dates
 
 ```{r}
-ath.info.test <- merge(ath.full.info,ath.testdates,by="name",all = T) %>% 
+ath.info.test <- merge(ath.full.info, ath.coviddates, by.x="name", by.y="athlete", all = T) %>% 
   relocate(name,.after=ath.id) %>% 
   arrange(ath.id)
 
@@ -475,18 +462,23 @@ res <- ath.info.test
 for (i in ath.info.test$ath.id) {
 # for (i in "BA_002") {
   ath.activities <- all.activities %>% filter(ath.id==i)
-  tests <- c(ath.info.test$test_date_1[ath.info.test$ath.id == i],
-             ath.info.test$test_date_2[ath.info.test$ath.id == i])
-  for (test_i in seq_len(sum(!is.na(tests)))) {
-    if (test_i == 1){
-      t = "test1"
-      t.date = tests[test_i]
+  covid_dates <- c(ath.info.test$diagnose_date[ath.info.test$ath.id == i],
+                   ath.info.test$vax_1[ath.info.test$ath.id == i],
+                   ath.info.test$vax_2[ath.info.test$ath.id == i])
+  for (date_i in seq_len(length(covid_dates))) {
+    if (date_i == 1){
+      t = "covid"
+      t.date = covid_dates[date_i]
+    } else if (date_i == 2){
+      t = "vax1"
+      t.date = covid_dates[date_i]
     } else {
-      t = "test2"
-      t.date = tests[test_i]
+      t = "vax2"
+      t.date = covid_dates[date_i]
     }
-    for (period in c("prevweek","prevmonth","prevyear")){
-      days=case_when(period=="prevweek" ~ 7, period=="prevmonth" ~ 35, period=="prevyear" ~ 364, TRUE ~ 0)
+    # first, calculate pre-date features
+    for (period in c("prevweek","prevfort","prevmonth")){
+      days=case_when(period=="prevweek" ~ 7, period=="prevfort" ~ 14, period=="prevmonth" ~ 28, TRUE ~ 0)
       # get all activities for the the period
       sport.period.activities <- ath.activities %>% 
         filter(as.Date(as.character(date),"%Y%m%d") < t.date,
@@ -502,6 +494,17 @@ for (i in ath.info.test$ath.id) {
       res[res$ath.id == i,paste0(t,".lutrimp_goldvt.total.",period)] <- if (all(is.na(sport.period.activities$lutrimp.goldvt)))
         {NA} else {
         sport.period.activities %>% summarise(total_trimp = round(sum(lutrimp.goldvt,na.rm=T),1)) %>% as.numeric() }
+      # heart rate info (max and avg)
+      res[res$ath.id == i,paste0(t,".hrmax.",period)] <- ifelse(dim(sport.period.activities)[1] == 0 | 
+                                                                  all(is.na(sport.period.activities$hrmax.activity)),
+                                                                NA, 
+                                                                sport.period.activities %>%
+                                                                  summarise(total_trimp = max(hrmax.activity,na.rm=T)) %>% as.numeric())
+      res[res$ath.id == i,paste0(t,".hravg.",period)] <- ifelse(dim(sport.period.activities)[1] == 0| 
+                                                                  all(is.na(sport.period.activities$hr.avg)),
+                                                                NA, 
+                                                                sport.period.activities %>%
+                                                                  summarise(total_trimp = round(mean(hr.avg,na.rm=T),0)) %>% as.numeric())
       # weekly average
       if(period != "prevweek") {
         res[res$ath.id == i,paste0(t,".sessions.wkavg.",period)] <- 
@@ -548,190 +551,223 @@ for (i in ath.info.test$ath.id) {
         res[res$ath.id == i,paste0(t,".lutrimp_goldvt.monotony.",period)] <- round(sum(wk_monot.lutrimp_goldvt,na.rm=T)/(days/7)/
                                                                                      sd(wk_monot.lutrimp_goldvt,na.rm=T),2)
       } # end monotony calculation
-      # sessions per sport
-      for (sport in unique(ath.activities$sport_type)) {
-        # to name variable
-        if (sport == "Running") {
-          sp="run"
-        } else if (sport == "Cycling") {
-          sp="bike"
-        } else {
-          sp="other"
-        }
-        # get all activities for the sport and the period
-        sport.period.activities <- ath.activities %>% 
-          filter(sport_type == sport) %>% 
-          filter(as.Date(as.character(date),"%Y%m%d") < t.date,
-                 as.Date(as.character(date),"%Y%m%d") >= t.date - days)
-        if (dim(sport.period.activities)[1] == 0) {
-          # go to next sport
-          res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- 0
-          res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- 0
-          next
-        }
-        # total sessions
-        res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- sport.period.activities %>%
-          count() %>% as.numeric()
-        # weekly average
-        if(period != "prevweek") {
-          # sessions
-          res[res$ath.id == i,paste0(t,".",sp,".sessions.wkavg.",period)] <- 
-            round(res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)]/(days/7),1)
-        }
-        # total hours
-        res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- sport.period.activities %>%
-          summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
-        # weekly average
-        if(period != "prevweek") {
-          # hours
-          res[res$ath.id == i,paste0(t,".",sp,".hours.wkavg.",period)] <- 
-            round(res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)]/(days/7),1)
-        }
-        # total distance in km
-        res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
-        # weekly average
-        if(period != "prevweek") {
-          # distance
-          res[res$ath.id == i,paste0(t,".",sp,".km.wkavg.",period)] <- 
-            round(res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)]/(days/7),2)
-        }
-        # single session average hours
-        res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(mean(duration.min)/60,1)) %>% as.numeric()
-        # single session average distance
-        res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(mean(total_dist.km),2)) %>% as.numeric()
-        # single session max hours
-        res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(max(duration.min)/60,1)) %>% as.numeric()
-        # single session max distance
-        res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(max(total_dist.km),2)) %>% as.numeric()
-      } # end sport loop
-    } # end period loop
-    
-    # between tests
-    if(test_i == 2) {
+      # COMMENT NEXT LOOP, NO NEED TO SPLIT BY SPORT
+      # # sessions per sport
+      # for (sport in unique(ath.activities$sport_type)) {
+      #   # to name variable
+      #   if (sport == "Running") {
+      #     sp="run"
+      #   } else if (sport == "Cycling") {
+      #     sp="bike"
+      #   } else {
+      #     sp="other"
+      #   }
+      #   # get all activities for the sport and the period
+      #   sport.period.activities <- ath.activities %>% 
+      #     filter(sport_type == sport) %>% 
+      #     filter(as.Date(as.character(date),"%Y%m%d") < t.date,
+      #            as.Date(as.character(date),"%Y%m%d") >= t.date - days)
+      #   if (dim(sport.period.activities)[1] == 0) {
+      #     # go to next sport
+      #     res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- 0
+      #     next
+      #   }
+      #   # total sessions
+      #   res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- sport.period.activities %>%
+      #     count() %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # sessions
+      #     res[res$ath.id == i,paste0(t,".",sp,".sessions.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)]/(days/7),1)
+      #   }
+      #   # total hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- sport.period.activities %>%
+      #     summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # hours
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)]/(days/7),1)
+      #   }
+      #   # total distance in km
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # distance
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)]/(days/7),2)
+      #   }
+      #   # single session average hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(mean(duration.min)/60,1)) %>% as.numeric()
+      #   # single session average distance
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(mean(total_dist.km),2)) %>% as.numeric()
+      #   # single session max hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(max(duration.min)/60,1)) %>% as.numeric()
+      #   # single session max distance
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(max(total_dist.km),2)) %>% as.numeric()
+      # } # end sport loop
+    } # end period1 loop
+    ##############################################################################
+    ##### second, calculate after-date features
+    ##############################################################################
+    for (period in c("nextweek","nextfort","nextmonth")){
+      days=case_when(period=="nextweek" ~ 7, period=="nextfort" ~ 14, period=="nextmonth" ~ 28, TRUE ~ 0)
+      # get all activities for the the period
+      sport.period.activities <- ath.activities %>% 
+        filter(as.Date(as.character(date),"%Y%m%d") > t.date,
+               as.Date(as.character(date),"%Y%m%d") <= t.date + days)
       # total sessions
-      t1.date = tests[1]
-      t2.date = tests[2]
-      weeks.btw = round(as.numeric(t2.date - t1.date)/7,0)
-      period.activities <- ath.activities %>% 
-        filter(as.Date(as.character(date),"%Y%m%d") < t2.date,
-               as.Date(as.character(date),"%Y%m%d") > t1.date)
-      res[res$ath.id == i,"btwtests.weeks"] <- weeks.btw
-      res[res$ath.id == i,"btwtests.sessions.total"] <- period.activities %>% count() %>% as.numeric()
-      res[res$ath.id == i,"btwtests.sessions.wkavg"] <- round(res[res$ath.id == i,"btwtests.sessions.total"]/weeks.btw,1)
-      
-      #########
+      res[res$ath.id == i,paste0(t,".sessions.total.",period)] <- sport.period.activities %>%
+        count() %>% as.numeric()
       # total trimps
-      res[res$ath.id == i,paste0("btwtests.etrimp.total")] <- period.activities %>%
+      res[res$ath.id == i,paste0(t,".etrimp.total.",period)] <- sport.period.activities %>%
         summarise(total_trimp = round(sum(etrimp,na.rm=T),1)) %>% as.numeric()
-      res[res$ath.id == i,paste0("btwtests.lutrimp.total")] <- period.activities %>%
+      res[res$ath.id == i,paste0(t,".lutrimp.total.",period)] <- sport.period.activities %>%
         summarise(total_trimp = round(sum(lutrimp,na.rm=T),1)) %>% as.numeric()
-      res[res$ath.id == i,paste0("btwtests.lutrimp_goldvt.total")] <- if (all(is.na(period.activities$lutrimp.goldvt)))
-      {NA} else {period.activities %>% summarise(total_trimp = round(sum(lutrimp.goldvt,na.rm=T),1)) %>% as.numeric() }
+      res[res$ath.id == i,paste0(t,".lutrimp_goldvt.total.",period)] <- if (all(is.na(sport.period.activities$lutrimp.goldvt)))
+      {NA} else {
+        sport.period.activities %>% summarise(total_trimp = round(sum(lutrimp.goldvt,na.rm=T),1)) %>% as.numeric() }
+      # heart rate info (max and avg)
+      res[res$ath.id == i,paste0(t,".hrmax.",period)] <- ifelse(dim(sport.period.activities)[1] == 0 | 
+                                                                  all(is.na(sport.period.activities$hrmax.activity)),
+                                                                NA, 
+                                                                sport.period.activities %>%
+                                                                  summarise(total_trimp = max(hrmax.activity,na.rm=T)) %>% as.numeric())
+      res[res$ath.id == i,paste0(t,".hravg.",period)] <- ifelse(dim(sport.period.activities)[1] == 0| 
+                                                                  all(is.na(sport.period.activities$hr.avg)),
+                                                                NA, 
+                                                                sport.period.activities %>%
+                                                                  summarise(total_trimp = round(mean(hr.avg,na.rm=T),0)) %>% as.numeric())
       # weekly average
-      res[res$ath.id == i,paste0("btwtests.etrimp.wkavg")] <- 
-        round(res[res$ath.id == i,paste0("btwtests.etrimp.total")]/weeks.btw,1)
-      res[res$ath.id == i,paste0("btwtests.lutrimp.wkavg")] <- 
-        round(res[res$ath.id == i,paste0("btwtests.lutrimp.total")]/weeks.btw,1)
-      res[res$ath.id == i,paste0("btwtests.lutrimp_goldvt.wkavg")] <- 
-        round(res[res$ath.id == i,paste0("btwtests.lutrimp_goldvt.total")]/weeks.btw,1)
+      if(period != "nextweek") {
+        res[res$ath.id == i,paste0(t,".sessions.wkavg.",period)] <- 
+          round(res[res$ath.id == i,paste0(t,".sessions.total.",period)]/(days/7),1)
+        res[res$ath.id == i,paste0(t,".etrimp.wkavg.",period)] <- 
+          round(res[res$ath.id == i,paste0(t,".etrimp.total.",period)]/(days/7),1)
+        res[res$ath.id == i,paste0(t,".lutrimp.wkavg.",period)] <- 
+          round(res[res$ath.id == i,paste0(t,".lutrimp.total.",period)]/(days/7),1)
+        res[res$ath.id == i,paste0(t,".lutrimp_goldvt.wkavg.",period)] <- 
+          round(res[res$ath.id == i,paste0(t,".lutrimp_goldvt.total.",period)]/(days/7),1)
+      }
       # monotony
-      wk_monot.etrimp <- NULL
-      wk_monot.lutrimp <- NULL
-      wk_monot.lutrimp_goldvt <- NULL
-      for (wk in seq_len(weeks.btw)){
-        # loop through weeks
-        wk_monot.etrimp <- c(wk_monot.etrimp, ath.activities %>% 
-                               filter(as.Date(as.character(date),"%Y%m%d") < (t2.date - (7*(wk-1))),
-                                      as.Date(as.character(date),"%Y%m%d") >= (t2.date - (7*wk))) %>% 
-                               summarise(m=round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),2)) %>% as.numeric())
-        wk_monot.lutrimp <- c(wk_monot.lutrimp, ath.activities %>% 
-                                filter(as.Date(as.character(date),"%Y%m%d") < (t2.date - (7*(wk-1))),
-                                       as.Date(as.character(date),"%Y%m%d") >= (t2.date - (7*wk))) %>% 
-                                summarise(m=round(sum(lutrimp,na.rm=T)/7/sd(lutrimp,na.rm=T),2)) %>% as.numeric())
-        wk_monot.lutrimp_goldvt <- c(wk_monot.lutrimp_goldvt,
-                      ath.activities %>% 
-                        filter(as.Date(as.character(date),"%Y%m%d") < (t2.date - (7*(wk-1))),
-                               as.Date(as.character(date),"%Y%m%d") >= (t2.date - (7*wk))) %>% 
-                        summarise(m=round(sum(lutrimp.goldvt,na.rm=T)/7/sd(lutrimp.goldvt,na.rm=T),2)) %>% as.numeric())
-      } # week loop
-      res[res$ath.id == i,paste0("btwtests.etrimp.monotony")] <- round(sum(wk_monot.etrimp,na.rm=T)/weeks.btw/
-                                                                         sd(wk_monot.etrimp,na.rm=T),2)
-      res[res$ath.id == i,paste0("btwtests.lutrimp.monotony")] <- round(sum(wk_monot.lutrimp,na.rm=T)/weeks.btw/
-                                                                          sd(wk_monot.lutrimp,na.rm=T),2)
-      res[res$ath.id == i,paste0("btwtests.lutrimp_goldvt.monotony")] <-
-        round(sum(wk_monot.lutrimp_goldvt,na.rm=T)/weeks.btw/sd(wk_monot.lutrimp_goldvt,na.rm=T),2)
-      # monotony calculation
-      #########
-      
-      # sport loop
-      for (sport in unique(ath.activities$sport_type)) {
-        # to name variable
-        if (sport == "Running") {
-          sp="run"
-        } else if (sport == "Cycling") {
-          sp="bike"
-        } else {
-          sp="other"
-        }
-        # get all activities for the sport and the period
-        sport.period.activities <- ath.activities %>% 
-          filter(sport_type == sport) %>% 
-          filter(as.Date(as.character(date),"%Y%m%d") < t2.date,
-                 as.Date(as.character(date),"%Y%m%d") > t1.date)
-        
-        if (dim(sport.period.activities)[1] == 0) {
-          # go to next sport
-          res[res$ath.id == i,paste0("btwtests.",sp,".sessions.total")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".hours.total")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".km.total")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".hours.session.avg")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".km.session.avg")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".hours.session.max")] <- 0
-          res[res$ath.id == i,paste0("btwtests.",sp,".km.session.max")] <- 0
-          next
-        }
-        # total sessions
-        res[res$ath.id == i,paste0("btwtests.",sp,".sessions.total")] <- sport.period.activities %>%
-          count() %>% as.numeric()
-        # weekly average sessions
-        res[res$ath.id == i,paste0("btwtests.",sp,".sessions.wkavg")] <- 
-          round(res[res$ath.id == i,paste0("btwtests.",sp,".sessions.total")]/weeks.btw,1)
-        # total hours
-        res[res$ath.id == i,paste0("btwtests.",sp,".hours.total")] <- sport.period.activities %>%
-          summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
-        # weekly average hours
-        res[res$ath.id == i,paste0("btwtests.",sp,".hours.wkavg")] <- 
-          round(res[res$ath.id == i,paste0("btwtests.",sp,".hours.total")]/weeks.btw,1)
-        # total distance in km
-        res[res$ath.id == i,paste0("btwtests.",sp,".km.total")] <- sport.period.activities %>%
-          summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
-        # weekly average distance
-        res[res$ath.id == i,paste0("btwtests.",sp,".km.wkavg")] <- 
-          round(res[res$ath.id == i,paste0("btwtests.",sp,".km.total")]/weeks.btw,2)
-        # single session average hours
-        res[res$ath.id == i,paste0("btwtests.",sp,".hours.session.avg")] <- sport.period.activities %>%
-          summarise(total_distance = round(mean(duration.min)/60,1)) %>% as.numeric()
-        # single session average distance
-        res[res$ath.id == i,paste0("btwtests.",sp,".km.session.avg")] <- sport.period.activities %>%
-          summarise(total_distance = round(mean(total_dist.km),2)) %>% as.numeric()
-        # single session max hours
-        res[res$ath.id == i,paste0("btwtests.",sp,".hours.session.max")] <- sport.period.activities %>%
-          summarise(total_distance = round(max(duration.min)/60,1)) %>% as.numeric()
-        # single session max distance
-        res[res$ath.id == i,paste0("btwtests.",sp,".km.session.max")] <- sport.period.activities %>%
-          summarise(total_distance = round(max(total_dist.km),2)) %>% as.numeric()
-      } # end sport loop
-    } # end between test calculations
+      if (period == "nextweek"){
+        res[res$ath.id == i,paste0(t,".etrimp.monotony.",period)] <- sport.period.activities %>%
+          summarise(monotony = round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),1)) %>% as.numeric()
+        res[res$ath.id == i,paste0(t,".lutrimp.monotony.",period)] <- sport.period.activities %>%
+          summarise(monotony = round(sum(lutrimp,na.rm=T)/7/sd(lutrimp,na.rm=T),1)) %>% as.numeric()
+        res[res$ath.id == i,paste0(t,".lutrimp_goldvt.monotony.",period)] <- if (all(is.na(sport.period.activities$lutrimp.goldvt)))
+        {NA} else { sport.period.activities %>%
+            summarise(monotony = round(sum(lutrimp.goldvt,na.rm=T)/7/sd(lutrimp.goldvt,na.rm=T),1)) %>% as.numeric()}
+      } else {
+        wk_monot.etrimp <- NULL
+        wk_monot.lutrimp <- NULL
+        wk_monot.lutrimp_goldvt <- NULL
+        for (wk in seq_len(days/7)){
+          # loop through weeks
+          wk_monot.etrimp <- c(wk_monot.etrimp, 
+                               ath.activities %>% 
+                                 filter(as.Date(as.character(date),"%Y%m%d") > (t.date + (7*(wk-1))),
+                                        as.Date(as.character(date),"%Y%m%d") <= (t.date + (7*wk))) %>% 
+                                 summarise(m=round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),2)) %>% as.numeric())
+          wk_monot.lutrimp <- c(wk_monot.lutrimp,
+                                ath.activities %>% 
+                                  filter(as.Date(as.character(date),"%Y%m%d") > (t.date + (7*(wk-1))),
+                                         as.Date(as.character(date),"%Y%m%d") <= (t.date + (7*wk))) %>% 
+                                  summarise(m=round(sum(lutrimp,na.rm=T)/7/sd(lutrimp,na.rm=T),2)) %>% as.numeric())
+          wk_monot.lutrimp_goldvt <- c(wk_monot.lutrimp_goldvt,
+                                       ath.activities %>% 
+                                         filter(as.Date(as.character(date),"%Y%m%d") > (t.date + (7*(wk-1))),
+                                                as.Date(as.character(date),"%Y%m%d") <= (t.date + (7*wk))) %>% 
+                                         summarise(m=round(sum(lutrimp.goldvt,na.rm=T)/7/sd(lutrimp.goldvt,na.rm=T),2)) %>% as.numeric())
+        } # week loop
+        res[res$ath.id == i,paste0(t,".etrimp.monotony.",period)] <- round(sum(wk_monot.etrimp,na.rm=T)/(days/7)/
+                                                                             sd(wk_monot.etrimp,na.rm=T),2)
+        res[res$ath.id == i,paste0(t,".lutrimp.monotony.",period)] <- round(sum(wk_monot.lutrimp,na.rm=T)/(days/7)/
+                                                                              sd(wk_monot.lutrimp,na.rm=T),2)
+        res[res$ath.id == i,paste0(t,".lutrimp_goldvt.monotony.",period)] <- round(sum(wk_monot.lutrimp_goldvt,na.rm=T)/(days/7)/
+                                                                                     sd(wk_monot.lutrimp_goldvt,na.rm=T),2)
+      } # end monotony calculation
+      # COMMENT NEXT LOOP, NO NEED TO SPLIT BY SPORT
+      # # sessions per sport
+      # for (sport in unique(ath.activities$sport_type)) {
+      #   # to name variable
+      #   if (sport == "Running") {
+      #     sp="run"
+      #   } else if (sport == "Cycling") {
+      #     sp="bike"
+      #   } else {
+      #     sp="other"
+      #   }
+      #   # get all activities for the sport and the period
+      #   sport.period.activities <- ath.activities %>% 
+      #     filter(sport_type == sport) %>% 
+      #     filter(as.Date(as.character(date),"%Y%m%d") > t.date,
+      #            as.Date(as.character(date),"%Y%m%d") <= t.date + days)
+      #   
+      #   if (dim(sport.period.activities)[1] == 0) {
+      #     # go to next sport
+      #     res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- 0
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- 0
+      #     next
+      #   }
+      #   # total sessions
+      #   res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- sport.period.activities %>%
+      #     count() %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # sessions
+      #     res[res$ath.id == i,paste0(t,".",sp,".sessions.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)]/(days/7),1)
+      #   }
+      #   # total hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- sport.period.activities %>%
+      #     summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # hours
+      #     res[res$ath.id == i,paste0(t,".",sp,".hours.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)]/(days/7),1)
+      #   }
+      #   # total distance in km
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
+      #   # weekly average
+      #   if(period != "prevweek") {
+      #     # distance
+      #     res[res$ath.id == i,paste0(t,".",sp,".km.wkavg.",period)] <- 
+      #       round(res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)]/(days/7),2)
+      #   }
+      #   # single session average hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.session.avg.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(mean(duration.min)/60,1)) %>% as.numeric()
+      #   # single session average distance
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.session.avg.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(mean(total_dist.km),2)) %>% as.numeric()
+      #   # single session max hours
+      #   res[res$ath.id == i,paste0(t,".",sp,".hours.session.max.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(max(duration.min)/60,1)) %>% as.numeric()
+      #   # single session max distance
+      #   res[res$ath.id == i,paste0(t,".",sp,".km.session.max.",period)] <- sport.period.activities %>%
+      #     summarise(total_distance = round(max(total_dist.km),2)) %>% as.numeric()
+      # } # end sport2 loop
+    } # end period2 loop  
   } # end test loop
 } # end athlete loop
 # 
