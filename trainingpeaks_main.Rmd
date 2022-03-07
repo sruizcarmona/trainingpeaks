@@ -103,25 +103,17 @@ if(file.exists('out/rdas/tpeaks_newzones.rda')){
 
 ### Load test maxHR data, lab goldVT values and test dates
 
+
 ```{r}
 ####################################################
 #### maxHR
-if (file.exists('data/athlete_maxHR.txt')){
-  lab.maxHR <- read.table('data/athlete_maxHR.txt')
-  colnames(lab.maxHR) <- c('name','maxHR')
-}
-# add july update
-if (file.exists('data/athlete_maxHR_2107.txt')){
-  lab.maxHR <- rbind(lab.maxHR,
-                     setNames(read.table('data/athlete_maxHR_2107.txt'),c('name','maxHR')))
-}
-# get the most updated one, for duplicates
-if(exists("lab.maxHR")){
+if (file.exists('data/TP_data_covidex_covivax_MAXHR_220302.csv')){
+  lab.maxHR <- read.csv('data/TP_data_covidex_covivax_MAXHR_220302.csv')
   lab.maxHR <- lab.maxHR %>% 
-    arrange(name) %>% 
-    group_by(name) %>% 
-    filter(row_number()==n()) %>% 
-    ungroup()
+    mutate(name = gsub(" ", "", paste0(toupper(Name), toupper(surname))),
+           maxHR = maxhr) %>% 
+    select(name, maxHR) %>% 
+    drop_na()
 }
 
 ####################################################
