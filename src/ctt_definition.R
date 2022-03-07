@@ -48,7 +48,8 @@ brand_id <- setNames(read.table("data/manufacturer_id.tsv", sep="\t", stringsAsF
 #### brands that are chest-based even if they don't say so
 ########################
 real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
-                      "bryton", "stages_cycling"
+                      "bryton", "stages_cycling",
+                      "sigmasport"
                       # "tacx", "sigmasport", "the_sufferfest", "wahoo_fitness",
                       )
 
