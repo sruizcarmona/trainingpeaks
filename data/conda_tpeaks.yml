@@ -1,0 +1,29 @@
+name: tpeaks
+channels:
+  - salilab
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r
+  - r-devtools
+  - r-ggmap
+  - r-leaflet
+  - r-rlang=0.4.6
+  - r-pillar=1.4.4
+  - r-vctrs=0.3.1
+  - r-knitr
+  - r-zoo
+  - r-foreach
+  - r-doparallel
+  - r-xlsx
+  - r-openxlsx
+  - r-dplyr=1.0.0
+  - r-xml
+  - r-geosphere
+  - r-readr
+  - r-cli=2.5.0
+  - r-ggrepel
+prefix: /home/sruizcarmona/miniconda3/envs/tpeaks
+# ALSO INSTALL FIT FROM GITHUB:
+# https://github.com/sruizcarmona/fit
