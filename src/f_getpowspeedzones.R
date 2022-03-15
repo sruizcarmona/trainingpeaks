@@ -28,13 +28,7 @@ library(scales)
 
 get.hr_vs_all <- function(f,maxHR) {
   # add gpx support and tcx support
-  if (str_detect(f,"\\.gpx|\\.GPX")){
-    fitdata <- try(create.fitdata_from_gpx(f),silent=T) 
-  } else if (str_detect(f,"\\.tcx|\\.TCX")) {
-    fitdata <- try(create.fitdata_from_tcx(f),silent=T) 
-  } else {
-    fitdata <- try(read.fit(f),silent=T)
-  }
+  fitdata <- create_fitdata(file)
   if (class(fitdata) == "try-error"){return(NULL)}
   # discard if its shorter than a minute
   if (is.null(dim(fitdata$record)) || dim(fitdata$record)[1] < 60) {return(NULL)}
@@ -154,6 +148,7 @@ get.hr_vs_all <- function(f,maxHR) {
   hva.act$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   hva.act$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else if (!is.null(fitdata$session$device_brand_id)){fitdata$session$device_brand_id} else {NA}
   hva.act$device_product_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
+  hva.act$device_product_name <- if(!is.null(fitdata$session$device_model_name)){fitdata$session$device_model_name} else {NA}
   hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
 }
@@ -248,9 +243,9 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   # NO HR DATA
   # assign maxHR to labmaxHR in that case
   if (is.null(hr_vs_all)){
-    ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR),
-                                                        maxHR,
-                                                        NA_integer_)
+    ath.info$maxHR[ath.info$name == athlete] <- ifelse(isTRUE(labmaxHR),
+                                                      maxHR,
+                                                      NA)
     return(ath.info)
   }
   
