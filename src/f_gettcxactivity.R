@@ -32,7 +32,7 @@ readTCX <- function(file, timezone = "", speedunit = "m_per_s", distanceunit = "
   ## Core namespaces
   activity_ns <- names(which(ns == "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2")[1])
   extensions_ns <- names(which(ns == "http://www.garmin.com/xmlschemas/ActivityExtension/v2")[1])
-  
+
   ## Sport
   sport <- xml_attr(xml_find_all(doc, paste0("//", activity_ns, ":", "Activity")), "Sport")
   
@@ -40,10 +40,6 @@ readTCX <- function(file, timezone = "", speedunit = "m_per_s", distanceunit = "
   tp_xpath <- paste0("//", activity_ns, ":", "Trackpoint")
   tp_vars <- data.frame(name = children_names(doc, tp_xpath, ns),
                         ns = activity_ns)
-  
-  #### src test for device
-  device_brand_id <- if(str_detect(xml_text(doc), "Polar")) {device_brand_id <- 123} else {device_brand_id <- 0}
-  ###
   
   ## Position
   position_xpath <- paste0("//", activity_ns, ":", "Position")
@@ -71,6 +67,7 @@ readTCX <- function(file, timezone = "", speedunit = "m_per_s", distanceunit = "
   }
   
   is_time <- tp_vars$name == "Time"
+  is_sensorstate <- tp_vars$name == "SensorState"
   
   tps <- xml_find_all(doc, tp_xpath, ns[activity_ns])
   ## Double loop to extract obs
@@ -90,7 +87,7 @@ readTCX <- function(file, timezone = "", speedunit = "m_per_s", distanceunit = "
   if (any(run_cadence)) {
     names(observations)[run_cadence] <- "Cadence"
   }
-  observations[!is_time] <- apply(observations[!is_time], 2, as.numeric)
+  observations[!(is_time | is_sensorstate)] <- apply(observations[!(is_time | is_sensorstate)], 2, as.numeric)
   
   ## convert speed from speedunit to m/s
   if (speedunit != "m_per_s") {
@@ -104,8 +101,20 @@ readTCX <- function(file, timezone = "", speedunit = "m_per_s", distanceunit = "
     observations$distance <- distanceConversion(observations$distance)
   }
   
+  #### src test for device
+  device_brand_id <- if(str_detect(xml_text(doc), "Polar")) {device_brand_id <- 123} else {device_brand_id <- 0}
+  device_info_xml <- doc %>% xml_ns_strip() %>% 
+    xml_find_all(".//Activity")  %>% 
+    xml_children() %>% 
+    xml_find_all("//Creator") %>% 
+    xml_children() %>% 
+    xml_find_all("//Name") %>% xml_text()
+  device_model_name <- device_info_xml[device_info_xml !="Hardlopen"][1]
+  ###
+  
   attr(observations, "sport") <- sport
   attr(observations, "device_brand_id") <- device_brand_id
+  attr(observations, "device_model_name") <- device_model_name
   
   return(observations)
 }
@@ -135,10 +144,11 @@ create.fitdata_from_tcx <- function(tcxfile) {
                            Cadence="cadence",
                            LatitudeDegrees="lat",
                            LongitudeDegrees="lon",
-                           Watts="power"
+                           Watts="power",
+                           SensorState = "sensor"
                            ),
                  warn_missing=FALSE) %>%
-    select(time, altitude, distance, heart_rate, lat, lon, one_of("power")) %>%
+    select(time, altitude, distance, heart_rate, lat, lon, one_of("power", "sensor")) %>%
     mutate_at(if('heart_rate' %in% names(.)) 'heart_rate' else integer(0), as.numeric) %>%
     mutate(altitude = as.numeric(altitude),
            ascent = altitude-lag(altitude),
@@ -179,6 +189,7 @@ create.fitdata_from_tcx <- function(tcxfile) {
   # readTCX exports sport info as an attribute
   session$sport <- sum(sport_code[attributes(tcxdata)$sport])
   session$device_brand_id <- attributes(tcxdata)$device_brand_id
+  session$device_model_name <- attributes(tcxdata)$device_model_name
   # combine both into fitdata
   fitdata <- NULL
   fitdata$session <- session
