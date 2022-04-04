@@ -20,6 +20,7 @@ source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
 source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
+source('src/f_gettcxactivity.R')
 
 
 ## -----------------------------------------------------------------------------
