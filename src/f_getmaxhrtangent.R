@@ -107,6 +107,10 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   if (is.null(hr_vs_all)){
     return (0)
   }
+  # if only one file, the tangent method will fail, so return 0
+  if (length(unique(hr_vs_all$file)) < 2){
+    return (0)
+  }
   maxhr_per_activity <- hr_vs_all %>%
     # rowwise() %>%
     # mutate(file=last(str_split(file,"/")[[1]])) %>%
@@ -117,9 +121,14 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
               device_brand = ifelse(first(device_brand_id) %in% brand_id$brand_id,
                                     brand_id$brand[brand_id$brand_id == first(device_brand_id)],
                                     "unknown"),
-              device_model = ifelse(first(device_product_id) %in% product_id$product_id[product_id$brand == device_brand],
-                                    product_id %>% filter(brand == device_brand & product_id == first(device_product_id)) %>%           pull(model),
-                                    "unknown"),
+              device_model = ifelse(!is.na(first(device_product_name)),
+                                    first(device_product_name),
+                                    ifelse(first(device_product_id) %in% product_id$product_id[product_id$brand == device_brand],
+                                           product_id %>% filter(brand == device_brand & product_id == first(device_product_id)) %>%           pull(model),
+                                           "unknown")),
+              # device_model = ifelse(first(device_product_id) %in% product_id$product_id[product_id$brand == device_brand],
+              #                       product_id %>% filter(brand == device_brand & product_id == first(device_product_id)) %>%           pull(model),
+              #                       "unknown"),
               hr.sensor=first(hr.sensor),
               .groups="drop")
   maxhr_per_activity.140 <- maxhr_per_activity %>% 
@@ -128,7 +137,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   sourcedata <- maxhr_per_activity %>% 
     filter(hrmax > 1) %>% 
     mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
-    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl(paste(real_chest_model, collapse="|"), device_model), TRUE, hr.sensor)) %>% 
     filter(hr.sensor == TRUE)
   wrist_removed <- TRUE
   
@@ -137,7 +146,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     sourcedata <- maxhr_per_activity %>% 
       filter(hrmax > 1) %>% 
       mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
-      mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+      mutate(hr.sensor = ifelse(grepl(paste(real_chest_model, collapse="|"), device_model), TRUE, hr.sensor))
     wrist_removed <- FALSE
   }
   
@@ -151,7 +160,9 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   error_act <- sum(sourcedata$hrmax > xinterc)
   error_perc <- sum(sourcedata$hrmax > xinterc) / length(sourcedata$hrmax) * 100
   
-  if(dim(sourcedata)[1] < 10 | best_row$x < 150) {mylim_x <- 89} else {mylim_x <- 139}
+  if(dim(sourcedata)[1] < 10 | best_row$x < 150 |
+     pdata %>% arrange(-y) %>% pull(x) %>% .[1] < 150 # max Y value is too close to the left limit, for better visualization
+     ) {mylim_x <- 89} else {mylim_x <- 139}
   
   # add chest and device info
   chest_perc <- sum(sourcedata$hr.sensor == TRUE) / length(sourcedata$hr.sensor) * 100
@@ -198,11 +209,15 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     labs(x='HR (bpm)',y="",title=paste0("maxHR calculation for athlete ",ath.code)) +
     {if(wrist_removed == FALSE){
       annotate("rect",
-               xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+               # xmin=mylim_x*1.012,
+               xmin = (max(pdata$x,xinterc,na.rm=T)-(mylim_x+1))*0.01+(mylim_x+1),
+               xmax = (max(pdata$x,xinterc,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 48% of the window
                ymin=max(pdata$y,na.rm=T)*0.77,ymax=max(pdata$y,na.rm=T)*1.03,
                fill=box_sum_col,color=NA,alpha=0.85)} else {
                  annotate("rect",
-                          xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
+                          # xmin=mylim_x*1.012,
+                          xmin = (max(pdata$x,xinterc,na.rm=T)-(mylim_x+1))*0.01+(mylim_x+1),
+                          xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.48+(mylim_x+1), #to get 35% of the window
                           ymin=max(pdata$y,na.rm=T)*0.88,ymax=max(pdata$y,na.rm=T)*1.03,
                           fill=box_sum_col,color=NA,alpha=0.95)}} +
     {if(chest_perc < 30){
@@ -234,7 +249,9 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
           axis.text.y = element_blank()) +
     # add info about devices
     annotate("rect",
-             xmin=mylim_x*1.012,xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.4+(mylim_x+1), #to get 35% of the window
+             # xmin=mylim_x*1.012,
+             xmin = (max(pdata$x,xinterc,na.rm=T)-(mylim_x+1))*0.01+(mylim_x+1),
+             xmax=(max(pdata$x,na.rm=T)-(mylim_x+1))*0.4+(mylim_x+1), #to get 35% of the window
              ymin=max(pdata$y,na.rm=T)/10*0.1,ymax=max(pdata$y,na.rm=T)/10*1.9,
              fill="white",color=NA,alpha=0.95) +
     annotate("text",cex=2.5,

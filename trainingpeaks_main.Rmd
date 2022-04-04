@@ -74,6 +74,7 @@ source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
 source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
+source('src/f_gettcxactivity.R') # functions for reading tcx files
 ```
 
 ### Select athletes and directory
@@ -318,28 +319,16 @@ for (athlete in sel.athletes){
   
   # edit 211020, check all folders, not just the first one!
   sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, athlete)]
-  # comment 220125, better to get all type of files and process on the function itself, and add recursive option below
-  # sel.dirs <- NULL
-  # for (sel.dir in sel.dirs.tmp) {
-  #   # if (length(str_split(sel.dir,"/")[[1]]) == 5){
-  #   #   sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
-  #   # } else {
-  #   #   sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
-  #   #   sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
-  #   # }
-  # }
   files <- list.files(sel.dirs.tmp, pattern="*.*", recursive=T, full.names=T)
-  # files <- list.files(sel.dirs.tmp, pattern="*.*", full.names = TRUE)
-  # files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
+  files <- files[!str_detect(files, ".zip$")]
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
   start <- Sys.time()
-
   tp.athlete <- NULL
   tp.athlete <- foreach (file=files, .combine=rbind,
                          # .export=c("get.act_info_from_fitdata","smooth.data","onerow.df","get.date_GARMIN"),
-                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines","geosphere","XML","tidyr")) %dopar% {
+                         .packages=c("dplyr", "fit", "stringr", "zoo", "splines","geosphere","XML","tidyr", "xml2")) %dopar% {
     temp.tp.athlete <- process.fitfile(file, ath.id)
     temp.tp.athlete
   }
@@ -445,18 +434,24 @@ ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>
                     mutate(folder=tolower(sapply(str_split(file,"/"),function(x) x[4]))) %>%
                     group_by(ath.id) %>%
                     summarise(total_activities=n(), 
-                              month_2_year_0=sum(folder=="month_2_year_0"),
-                              month_12_year_0=sum(folder=="month_12_year_0"),
-                              month_2_year_2=sum(folder=="month_2_year_2"),
-                              month_12_year_2=sum(folder=="month_12_year_2"),
-                              full_2years=sum(folder=="full_2years"),
-                              n_cycling=sum(sport_type=="Cycling"),
-                              n_running=sum(sport_type=="Running"),
+                              # month_2_year_0=sum(folder=="month_2_year_0"),
+                              # month_12_year_0=sum(folder=="month_12_year_0"),
+                              # month_2_year_2=sum(folder=="month_2_year_2"),
+                              # month_12_year_2=sum(folder=="month_12_year_2"),
+                              # full_2years=sum(folder=="full_2years"),
+                              n_cycling=sum(sport_type=="Cycling", na.rm = T),
+                              n_running=sum(sport_type=="Running", na.rm = T),
                               n_other=sum(!grepl("Running|Cycling",sport_type)),
-                              n_heart=sum(!is.na(hr.avg)),n_power=sum(!is.na(power.avg)),
+                              n_heart=sum(!is.na(hr.avg)),
+                              n_heart_chest=sum(hr.sensor & !is.na(hr.avg)),
+                              n_power=sum(!is.na(power.avg)),
                               n_heart_power=sum(!is.na(power.avg) & !is.na(hrmax.activity))), by='ath.id', all=T) %>%
-  mutate(perc_heart=round(n_heart/total_activities*100,2),perc_power = round(n_power/total_activities*100,2), perc_heart_power = round(n_heart_power/total_activities*100,2)) %>% 
+  mutate(perc_heart=round(n_heart/total_activities*100,1),
+         perc_heart_chest = round(n_heart_chest/n_heart * 100, 1),
+         perc_power = round(n_power/total_activities*100,1),
+         perc_heart_power = round(n_heart_power/total_activities*100,1)) %>% 
   arrange(ath.id)
+
 # add error and duplicate count
 for (i in ath.info$name) {
   ath.info[ath.info$name==i,'n_error'] <- sum(!is.na(str_extract(error.sessions$file,i)))
@@ -473,10 +468,11 @@ for (i in ath.info$ath.id) {
 
 #merge with newzones and nice order
 ath.full.info <- merge(ath.info,tp.newzones,by="ath.id") %>% 
-  select(-name.y,-starts_with("month"),-full_2years) %>% 
+  select(-name.y) %>% 
   rename(name=name.x) %>% 
   relocate(any_of(c("n_error","n_duplicates")),.after=total_activities) %>% 
   relocate(perc_heart,.after=n_heart) %>% 
+  relocate(perc_heart_chest, .after=n_heart_chest) %>% 
   relocate(perc_power,.after=n_power)
 
 ath.full.info
@@ -500,7 +496,7 @@ res <- ath.info.test
 ```{r}
 for (i in ath.info.test$ath.id) {
 # for (i in "BA_002") {
-  ath.activities <- all.activities %>% filter(ath.id==i)
+  ath.activities <- all.activities %>% filter(ath.id==i) %>% filter(!is.na(sport_type))
   tests <- c(ath.info.test$test_date_1[ath.info.test$ath.id == i],
              ath.info.test$test_date_2[ath.info.test$ath.id == i])
   for (test_i in seq_len(sum(!is.na(tests)))) {
@@ -635,7 +631,7 @@ for (i in ath.info.test$ath.id) {
         }
         # total hours
         res[res$ath.id == i,paste0(t,".",sp,".hours.total.",period)] <- sport.period.activities %>%
-          summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
+          summarise(total_duration = round(sum(duration.min, na.rm = T)/60,1)) %>% as.numeric()
         # weekly average
         if(period != "prevweek") {
           # hours
@@ -644,7 +640,7 @@ for (i in ath.info.test$ath.id) {
         }
         # total distance in km
         res[res$ath.id == i,paste0(t,".",sp,".km.total.",period)] <- sport.period.activities %>%
-          summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
+          summarise(total_distance = round(sum(total_dist.km, na.rm = T),2)) %>% as.numeric()
         # weekly average
         if(period != "prevweek") {
           # distance
@@ -758,13 +754,13 @@ for (i in ath.info.test$ath.id) {
           round(res[res$ath.id == i,paste0("btwtests.",sp,".sessions.total")]/weeks.btw,1)
         # total hours
         res[res$ath.id == i,paste0("btwtests.",sp,".hours.total")] <- sport.period.activities %>%
-          summarise(total_duration = round(sum(duration.min)/60,1)) %>% as.numeric()
+          summarise(total_duration = round(sum(duration.min, na.rm = T)/60,1)) %>% as.numeric()
         # weekly average hours
         res[res$ath.id == i,paste0("btwtests.",sp,".hours.wkavg")] <- 
           round(res[res$ath.id == i,paste0("btwtests.",sp,".hours.total")]/weeks.btw,1)
         # total distance in km
         res[res$ath.id == i,paste0("btwtests.",sp,".km.total")] <- sport.period.activities %>%
-          summarise(total_distance = round(sum(total_dist.km),2)) %>% as.numeric()
+          summarise(total_distance = round(sum(total_dist.km, na.rm = T),2)) %>% as.numeric()
         # weekly average distance
         res[res$ath.id == i,paste0("btwtests.",sp,".km.wkavg")] <- 
           round(res[res$ath.id == i,paste0("btwtests.",sp,".km.total")]/weeks.btw,2)

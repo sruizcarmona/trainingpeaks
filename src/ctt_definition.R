@@ -52,3 +52,4 @@ real_chest_brand <- c("srm", "zwift", "giant_manufacturing_co",
                       # "tacx", "sigmasport", "the_sufferfest", "wahoo_fitness",
                       )
 
+real_chest_model <- c("edge", "Edge", "Polar V650", "Polar V800", "Polar M400", "Polar BEAT")

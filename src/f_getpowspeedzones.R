@@ -28,7 +28,7 @@ library(scales)
 
 get.hr_vs_all <- function(f,maxHR) {
   # add gpx support and tcx support
-  fitdata <- create_fitdata(file)
+  fitdata <- create_fitdata(f)
   if (class(fitdata) == "try-error"){return(NULL)}
   # discard if its shorter than a minute
   if (is.null(dim(fitdata$record)) || dim(fitdata$record)[1] < 60) {return(NULL)}
@@ -98,6 +98,8 @@ get.hr_vs_all <- function(f,maxHR) {
     fitdata$record$speed[(hrlength-9):hrlength] <- NA
     hva.act$speed <- smooth.data(3.79*fitdata$record$speed,20)
     hva.act$speed[hva.act$speed == "NaN"] <- NA
+    # change Inf speed to NA as it was failing on the lmfit step below
+    hva.act$speed[is.infinite(hva.act$speed)] <- NA
     # # remove all speed = 0
     # hva.act <- hva.act[hva.act$speed != "NaN",]
     # hva.act <- hva.act[hva.act$speed !=0,]
@@ -216,6 +218,7 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   # }
   # files <- list.files(sel.dirs, pattern="*.*", full.names = TRUE)
   files <- list.files(sel.dirs, pattern="*.*", recursive=T, full.names=T)
+  files <- files[!str_detect(files, ".zip$")]
   #files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
   # hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
   #                         power.cor=character(), speed.cor=character(),sport=character(),
@@ -271,9 +274,14 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
     filter(id == 1)
   # remove suunto watches
   hr_vs_all <- hr_vs_all %>% 
-    filter(device_brand_id != 23)
+    filter(is.na(device_brand_id) | device_brand_id != 23)
   # check if the athlete had only suunto watches, so hr_vs_all would be empty
+  # NO HR DATA
+  # assign maxHR to labmaxHR in that case
   if (dim(hr_vs_all)[1] == 0){
+    ath.info$maxHR[ath.info$name == athlete] <- ifelse(isTRUE(labmaxHR),
+                                                       maxHR,
+                                                       NA)
     return(ath.info)
   }
   
