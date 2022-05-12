@@ -127,7 +127,7 @@ get.hr_vs_all <- function(f,maxHR) {
   # check how pow and hr are correlated and store r2 to filter later
   if (!is.na(sport) & !is.null(fitdata$record$power) & !all(is.na(hva.act$power))){
     knots <- quantile(hva.act$hr, p = c(0.5))
-    lm_fit <- lm (power ~ bs(hr,knots=knots,degree = 3), data = hva.act)
+    lm_fit <- lm (power ~ splines::bs(hr,knots=knots,degree = 3), data = hva.act)
     hva.act$power.cor <- round(summary(lm_fit)$r.squared ,2)
     hva.act$power.cor[hva.act$power.cor == "NaN"] <- NA
   } else {
@@ -154,6 +154,7 @@ get.hr_vs_all <- function(f,maxHR) {
   hva.act$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   hva.act$device_brand_id <- if(!is.null(fitdata$file_id$manufacturer)){fitdata$file_id$manufacturer} else if (!is.null(fitdata$session$device_brand_id)){fitdata$session$device_brand_id} else {NA}
   hva.act$device_product_id <- if(!is.null(fitdata$file_id$product)){fitdata$file_id$product} else {NA}
+  hva.act$device_product_name <- if(!is.null(fitdata$session$device_model_name)){fitdata$session$device_model_name} else {NA}
   hva.act$file <- last(str_split(f,"/")[[1]]) #debug
   return(hva.act)
 }
@@ -169,7 +170,7 @@ get.hr_vs_all <- function(f,maxHR) {
 
 get.power_zones <- function(data,hrmax) {
   knots <- quantile(data$hr, p = c(0.5))
-  lm_fit <- lm (power ~ bs(hr,knots=knots,degree = 3), data = data)
+  lm_fit <- lm (power ~ splines::bs(hr,knots=knots,degree = 3), data = data)
   cor <- round(summary(lm_fit)$r.squared,2)
   hr.zones <- quantile(c(0:hrmax),probs=c(seq(0,1,by=0.1),0.83,0.94))
   pow.zones <- round(predict(lm_fit,newdata = data.frame(hr=hr.zones)),2)
@@ -212,14 +213,16 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   } else {
     labmaxHR <- TRUE
   }
-  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)][1]
+  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)]
   # if (length(str_split(sel.dirs,"/")[[1]]) == 5){
   #   sel.dirs <- list.dirs(sel.dirs)
   # } else {
   #   sel.dirs <- list.dirs(sel.dirs,recursive=F)
   #   sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
   # }
-  files <- list.files(sel.dirs, pattern="*.*", full.names = TRUE)
+  # files <- list.files(sel.dirs, pattern="*.*", full.names = TRUE)
+  files <- list.files(sel.dirs, pattern="*.*", recursive=T, full.names=T)
+  #files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
   # hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
   #                         power.cor=character(), speed.cor=character(),sport=character(),
   #                         # maxhr=character(),
@@ -241,10 +244,14 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   duration <- end - start
   print(duration)
   # stopCluster(cl)
-
+  
   # check if hr_vs_all contains any rows, otherwise don't do anything below these lines and return ath.info.
   # NO HR DATA
+  # assign maxHR to labmaxHR in that case
   if (is.null(hr_vs_all)){
+    ath.info$maxHR[ath.info$name == athlete] <- ifelse(isTRUE(labmaxHR),
+                                                      maxHR,
+                                                      NA)
     return(ath.info)
   }
   
@@ -283,7 +290,7 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
   ath.info$tangent.maxHR[ath.info$name == athlete] <- hrmax.athlete
   ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
-                                                      max(maxHR,hrmax.athlete),
+                                                      max(maxHR, hrmax.athlete, na.rm=T),
                                                       hrmax.athlete)
   hrmax.athlete <- ath.info$maxHR[ath.info$name == athlete]
   
