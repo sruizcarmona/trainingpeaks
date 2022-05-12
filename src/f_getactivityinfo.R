@@ -49,6 +49,36 @@ onerow.df <- function(values,colnames){
 }
 
 ############################################################################################################
+## FUNCTION TO READ FILE 
+## read file, find extension for format and return fitdata
+## no matter what format it is, usable by both the HR determination and the activity
+###
+## input filename
+## output fitdata
+############################################################################################################
+
+create_fitdata <- function(f) {
+  # identify file format from extension
+  if (str_detect(f,"\\.fit|\\.FIT")){
+    fitdata <- try(read.fit(f),silent=T)
+  } else if (str_detect(f,"\\.gpx|\\.GPX")){
+    fitdata <- try(create.fitdata_from_gpx(f),silent=T)
+  } else if (str_detect(f,"\\.tcx|\\.TCX")) {
+    fitdata <- try(create.fitdata_from_tcx(f),silent=T)
+  } else {
+    # if here, it means there is no known extension, so will try fit > gpx > tcx and see if any works
+    fitdata <- try(read.fit(f),silent=T)
+    if (class(fitdata) == "try-error"){
+      fitdata <- try(create.fitdata_from_gpx(f),silent=T)
+      if (class(fitdata) == "try-error"){
+        fitdata <- try(create.fitdata_from_tcx(f),silent=T)
+      }
+    }
+  }
+  return(fitdata)
+}
+
+############################################################################################################
 ## MAIN FUNCTION 
 ## extract heart rate, power and speed from a file
 ###
@@ -81,20 +111,22 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
                                 ifelse(a$device_model_id %in% product_id$product_id[product_id$brand == a$device_brand_name],
                                        product_id %>% filter(brand == a$device_brand_name & product_id == a$device_model_id) %>% pull(model),
                                        "unknown"))
-                                
   a$hrmax_athlete <- tp.newzones$maxHR[tp.newzones$ath.id == ath.id]
   ###################
   # remove first and last 10 seconds, to reduce risk of peaks in sensor pairing, gps or other stuff
   fd <- fitdata$record[11:(dim(fitdata$record)[1]-10),]
-  # if, after that, the first 20 values are above 180, clean them too, as they are probably artifacts
-  if(any(fd$heart_rate[1:20] > 180, na.rm = T)){
-     fd$heart_rate[1:20] <- NA
-  }
   rownames(fd) <- NULL
   ###################
   # get info from heart_rate
   # check that heart_rate is present in fitdata and its above 10%, otherwise return NA
-  if ("heart_rate" %in% names(fd) & sum(!is.na(fd$heart_rate))/length(fd$heart_rate) > 0.1){
+  if ("heart_rate" %in% names(fd) & sum(!is.na(fd$heart_rate))/length(fd$heart_rate) > 0.1 & sum(fd$heart_rate != 0, na.rm=T)/length(fd$heart_rate) > 0.1){
+    # if, after that, the first 20 values are above 180, clean them too, as they are probably artifacts
+    if(any(fd$heart_rate[1:20] > 180, na.rm = T)){
+      fd$heart_rate[1:20] <- NA
+    }
+    # fix sensor based on brand or model, given there is HR info
+    a$hr.sensor = ifelse(a$device_brand_name %in% real_chest_brand, TRUE, a$hr.sensor)
+    a$hr.sensor = ifelse(grepl(paste(real_chest_model, collapse="|"), a$device_model_name), TRUE, a$hr.sensor)
     # clean hr=0, as sometimes the sensor fails
     fd$heart_rate[fd$heart_rate == 0] <- NA
     # smooth hr
@@ -208,7 +240,8 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   speed.cor.check <- tp.newzones$speed.cor[tp.newzones$ath.id == ath.id]
   if ("speed" %in% names(fd) & sum(!is.na(fd$speed))/length(fd$speed) > 0.1) {
     # smooth speed
-    smooth.speed <- smooth.data(3.79*fd$speed,20)
+    # remove Inf from fd$speed
+    smooth.speed <- smooth.data(3.79*fd$speed[is.finite(fd$speed)],20)
     smooth.speed <- smooth.speed[smooth.speed != "NaN" & !is.na(smooth.speed)]
     # run trimp scores, only if speedcorcheck exists and its higher than 0.2
     if(is.na(speed.cor.check) | speed.cor.check < 0.2) {
@@ -245,8 +278,12 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   ###################
   ## EXTRA STUFF
   ## extracted from fitfile session info
-  a$sport_code   <- if (!is.null(fitdata$session$sport)) {fitdata$session$sport} else {fitdata$sport$sport}
-  a$sport_type   <- names(sport_code)[sport_code == a$sport_code]
+  a$sport_code   <- ifelse(!is.null(fitdata$session$sport),
+                           fitdata$session$sport,
+                           ifelse(!is.null(fitdata$sport$sport), 
+                                  fitdata$sport$sport,
+                                  NA))
+  a$sport_type   <- ifelse(is.na(a$sport_code), NA, names(sport_code)[sport_code == a$sport_code])
   a$cal          <- if (is.null(fitdata$session$total_calories)) {NA} else {fitdata$session$total_calories}
   a$power.max    <- if (is.null(fitdata$session$max_power)) {NA} else {fitdata$session$max_power}
   a$power.avg    <- if (is.null(fitdata$session$avg_power)) {NA} else {fitdata$session$avg_power}
@@ -268,29 +305,19 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
 ############################################################################################################
 
 process.fitfile <- function(file,ath.id) {
-  # read file
-  # directly if .fit, or create fitdata first, if .gpx or .tcx
-  # add gpx support and tcx support
-  if (str_detect(file, "\\.gpx|\\.GPX")){
-    fitdata <- try(create.fitdata_from_gpx(file),silent=T) 
-    if (class(fitdata) == "try-error"){
-      act.err <- onerow.df(c(ath.id,rep('file error (gpx format)',length(act.err.names)-2),file), act.err.names)
-      return(act.err)
-    }
-  } else if (str_detect(file, "\\.tcx|\\.TCX")) {
-    fitdata <- try(create.fitdata_from_tcx(file),silent=T) 
-    if (class(fitdata) == "try-error"){
-      act.err <- onerow.df(c(ath.id,rep('file error (tcx format)',length(act.err.names)-2),file), act.err.names)
-      return(act.err)
-    }
-  } else {
-    fitdata <- try(read.fit(file),silent=T)
-  }
+  # read file and create fitdata
+  fitdata <- create_fitdata(file)
   ###################
   # check errors in file or before processing the activity
   # skip files with errors
   if (class(fitdata) == "try-error"){
-    act.err <- onerow.df(c(ath.id,rep('file error (reading)',length(act.err.names)-2),file), act.err.names)
+    if (str_detect(file,"\\.pwx|\\.PWX")) {
+      act.err <- onerow.df(c(ath.id,rep('file error (PWX format)',length(act.err.names)-2),file), act.err.names)
+    } else if (str_detect(file,"\\.srm|\\.SRM")) {
+      act.err <- onerow.df(c(ath.id,rep('file error (SRM format)',length(act.err.names)-2),file), act.err.names)
+    } else {
+      act.err <- onerow.df(c(ath.id,rep('file error (reading)',length(act.err.names)-2),file), act.err.names)
+    }
     return(act.err)
   }
   # discard if there are no records or it's shorter than a minute
@@ -320,6 +347,11 @@ process.fitfile <- function(file,ath.id) {
   # act hr higher than maxhr
   if(!is.na(act$hrmax.activity) & act$hrmax.activity > act$hrmax_athlete) {
     act.err <- onerow.df(c(ath.id,rep('activity error (maxHR too high)',length(act.err.names)-2),file),act.err.names)
+    return(act.err)
+  }
+  # timestamp missing
+  if(is.na(act$date)) {
+    act.err <- onerow.df(c(ath.id,rep('activity error (missing timestamp)',length(act.err.names)-2),file),act.err.names)
     return(act.err)
   }
   # wrong year (in the future), hard to find an auto fix and only 1 or 2 examples

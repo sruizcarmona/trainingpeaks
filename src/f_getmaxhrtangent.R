@@ -107,6 +107,10 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   if (is.null(hr_vs_all)){
     return (0)
   }
+  # if only one file, the tangent method will fail, so return 0
+  if (length(unique(hr_vs_all$file)) < 2){
+    return (0)
+  }
   maxhr_per_activity <- hr_vs_all %>%
     # rowwise() %>%
     # mutate(file=last(str_split(file,"/")[[1]])) %>%
@@ -133,7 +137,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   sourcedata <- maxhr_per_activity %>% 
     filter(hrmax > 1) %>% 
     mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
-    mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor)) %>% 
+    mutate(hr.sensor = ifelse(grepl(paste(real_chest_model, collapse="|"), device_model), TRUE, hr.sensor)) %>% 
     filter(hr.sensor == TRUE)
   wrist_removed <- TRUE
   
@@ -142,7 +146,7 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
     sourcedata <- maxhr_per_activity %>% 
       filter(hrmax > 1) %>% 
       mutate(hr.sensor = ifelse(device_brand %in% real_chest_brand, TRUE, hr.sensor)) %>% 
-      mutate(hr.sensor = ifelse(grepl("edge_", device_model), TRUE, hr.sensor))
+      mutate(hr.sensor = ifelse(grepl(paste(real_chest_model, collapse="|"), device_model), TRUE, hr.sensor))
     wrist_removed <- FALSE
   }
   
@@ -156,7 +160,9 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   error_act <- sum(sourcedata$hrmax > xinterc)
   error_perc <- sum(sourcedata$hrmax > xinterc) / length(sourcedata$hrmax) * 100
   
-  if(dim(sourcedata)[1] < 10 | best_row$x < 150) {mylim_x <- 89} else {mylim_x <- 139}
+  if(dim(sourcedata)[1] < 10 | best_row$x < 150 |
+     pdata %>% arrange(-y) %>% pull(x) %>% .[1] < 150 # max Y value is too close to the left limit, for better visualization
+     ) {mylim_x <- 89} else {mylim_x <- 139}
   
   # add chest and device info
   chest_perc <- sum(sourcedata$hr.sensor == TRUE) / length(sourcedata$hr.sensor) * 100
