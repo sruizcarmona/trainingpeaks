@@ -79,18 +79,74 @@ source('src/f_gettcxactivity.R')
 
 ### Select athletes and directory
 
+
+```{r}
+# https://alistaire.rbind.io/blog/coalescing-joins/
+coalesce_join <- function(x, y, 
+                          by = NULL, suffix = c(".x", ".y"), 
+                          join = dplyr::full_join, ...) {
+  
+    joined <- join(x, y, by = by, suffix = suffix, ...)
+    # names of desired output
+    cols <- union(names(x), names(y))
+    
+    to_coalesce <- names(joined)[!names(joined) %in% cols]
+    suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
+    # remove suffixes and deduplicate
+    to_coalesce <- unique(substr(
+        to_coalesce, 
+        1, 
+        nchar(to_coalesce) - nchar(suffix_used)
+    ))
+    
+    coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+        joined[[paste0(.x, suffix[1])]], 
+        joined[[paste0(.x, suffix[2])]]
+    ))
+    names(coalesced) <- to_coalesce
+    
+    dplyr::bind_cols(joined, coalesced)[cols] %>% 
+      mutate_if(is.character, list(~na_if(.,"")))
+}
+```
+
+
 ```{r}
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
-athlete_covid_dates <- read.csv('data/athlete_covid_dates.csv', stringsAsFactors = F)
+athlete_covid_dates_old <- read.csv('data/athlete_covid_dates.csv', stringsAsFactors = F)
+athlete_covid_dates <- read_csv("data/Overview_20220509.csv")
+athlete_covid_dates <- athlete_covid_dates %>% 
+  mutate(diagnose_date = coalesce(diagnose_datum, diagnose2_datum)) %>% 
+  select(athlete, MaxHR, diagnose_date, vax_1 = `Vaccin 1`, vax_2 = `Vaccin 2`, vax_3 = `Vaccin 3`, vax_4 = `Vaccin 4`)
+
+athlete_covid_dates <- coalesce_join(athlete_covid_dates, athlete_covid_dates_old, by="athlete")
+
+# add maxhr from old lists
+####################################################
+#### maxHR
+if (file.exists('data/TP_data_covidex_covivax_MAXHR_220302.csv')){
+  lab.maxHR_old <- read.csv('data/TP_data_covidex_covivax_MAXHR_220302.csv')
+  lab.maxHR_old <- lab.maxHR_old %>%
+    mutate(name = gsub(" ", "", paste0(toupper(Name), toupper(surname))),
+           MaxHR = maxhr) %>%
+    select(athlete=name, MaxHR ) %>%
+    drop_na()
+  athlete_covid_dates <- coalesce_join(athlete_covid_dates, lab.maxHR_old, by="athlete")
+}
+
+lab.maxHR <- athlete_covid_dates %>% 
+  select(name = athlete, maxHR = MaxHR) %>% 
+  drop_na()
+
 sel.athletes <- athlete_covid_dates$athlete
 
 # all folders in PRO_HEART, where sel.athletes folders are located
-ph_folders1 <- list.dirs('../COVIVAX',recursive = F)
-ph_folders2 <- list.dirs('../COVIDEX',recursive = F)
-# ph_folders3 <- list.dirs('../../2101_TRAININGPEAKS/MASTER_HEART',recursive = F)
-# ph_folders4 <- list.dirs(list.dirs('../../2107_TRAININGPEAKS', recursive=F), recursive = F)
-all.dirs.PH <- c(ph_folders1, ph_folders2)
+# ph_folders1 <- list.dirs('../COVIVAX',recursive = F)
+# ph_folders2 <- list.dirs('../COVIDEX',recursive = F)
+# all.dirs.PH <- c(ph_folders1, ph_folders2)
+
+all.dirs.PH <- list.dirs('../2205_ACTIVITIES/', recursive = F)
 ```
 
 ### Load previous results
@@ -105,17 +161,6 @@ if(file.exists('out/rdas/tpeaks_newzones.rda')){
 
 
 ```{r}
-####################################################
-#### maxHR
-if (file.exists('data/TP_data_covidex_covivax_MAXHR_220302.csv')){
-  lab.maxHR <- read.csv('data/TP_data_covidex_covivax_MAXHR_220302.csv')
-  lab.maxHR <- lab.maxHR %>% 
-    mutate(name = gsub(" ", "", paste0(toupper(Name), toupper(surname))),
-           maxHR = maxhr) %>% 
-    select(name, maxHR) %>% 
-    drop_na()
-}
-
 ####################################################
 #### gold VT
 if (file.exists('data/athlete_goldVT.csv')){
@@ -144,11 +189,13 @@ if(exists("lab.goldVT")){
 
 ####################################################
 #### covid dates
-ath.coviddates <- readr::read_csv('data/athlete_covid_dates.csv')
-ath.coviddates <- ath.coviddates %>% 
+# ath.coviddates <- readr::read_csv('data/athlete_covid_dates.csv')
+athlete_covid_dates <- athlete_covid_dates %>% 
   mutate(diagnose_date = parse_date(diagnose_date,format="%d/%m/%Y"),
          vax_1 = parse_date(vax_1,format="%d/%m/%Y"),
-         vax_2 = parse_date(vax_2,format="%d/%m/%Y"))
+         vax_2 = parse_date(vax_2,format="%d/%m/%Y"),
+         vax_3 = parse_date(vax_3,format="%d/%m/%Y"),
+         vax_4 = parse_date(vax_4,format="%d/%m/%Y"))
 ```
 
 ***
@@ -273,17 +320,7 @@ for (athlete in sel.athletes){
   
   # edit 211020, check all folders, not just the first one!
   sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, athlete)]
-  # sel.dirs <- NULL
-  # for (sel.dir in sel.dirs.tmp) {
-  #   # if (length(str_split(sel.dir,"/")[[1]]) == 5){
-  #   #   sel.dirs <- c(sel.dirs, list.dirs(sel.dir))
-  #   # } else {
-  #   #   sel.dirs.kk <- list.dirs(sel.dir, recursive=F)
-  #   #   sel.dirs <- c(sel.dirs, sel.dirs.kk[str_detect(sel.dirs.kk,"YEAR")])
-  #   # }
-  # }
   files <- list.files(sel.dirs.tmp, pattern="*.*", full.names = TRUE)
-  # files <- list.files(sel.dirs,pattern=".fit|gpx",full.names = TRUE)
   ath.id <- tp.newzones$ath.id[tp.newzones$name == athlete]
   ath.maxHR <- tp.newzones$maxHR[tp.newzones$name == athlete]
   
@@ -306,7 +343,7 @@ for (athlete in sel.athletes){
 stopCluster(cl)
 
 # save everything in a file, so we don't need to calculate them every time
-# save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
+save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
 ```
 
@@ -391,24 +428,30 @@ cohort_vs_athlete <- cohort_vs_athlete %>%
   filter(V2 != "rawzip") %>% 
   # mutate(V1 = ifelse(V1==V2,'P@H',V1)) %>% 
   arrange(V1) %>% 
-  distinct(V2, .keep_all = T)
+  distinct(V2, .keep_all = T) %>% 
+  mutate(V1 = "COVIVAX/COVIDEX")
 
 ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>% select(name,ath.id,cohort=V1),
                   all.activities %>%
                     mutate(folder=tolower(sapply(str_split(file,"/"),function(x) x[4]))) %>%
                     group_by(ath.id) %>%
                     summarise(total_activities=n(), 
-                              month_2_year_0=sum(folder=="month_2_year_0"),
-                              month_12_year_0=sum(folder=="month_12_year_0"),
-                              month_2_year_2=sum(folder=="month_2_year_2"),
-                              month_12_year_2=sum(folder=="month_12_year_2"),
-                              full_2years=sum(folder=="full_2years"),
-                              n_cycling=sum(sport_type=="Cycling"),
-                              n_running=sum(sport_type=="Running"),
+                              # month_2_year_0=sum(folder=="month_2_year_0"),
+                              # month_12_year_0=sum(folder=="month_12_year_0"),
+                              # month_2_year_2=sum(folder=="month_2_year_2"),
+                              # month_12_year_2=sum(folder=="month_12_year_2"),
+                              # full_2years=sum(folder=="full_2years"),
+                              n_cycling=sum(sport_type=="Cycling", na.rm=T),
+                              n_running=sum(sport_type=="Running", na.rm=T),
                               n_other=sum(!grepl("Running|Cycling",sport_type)),
-                              n_heart=sum(!is.na(hr.avg)),n_power=sum(!is.na(power.avg)),
+                              n_heart=sum(!is.na(hr.avg)),
+                              n_heart_chest=sum(hr.sensor & !is.na(hr.avg)),
+                              n_power=sum(!is.na(power.avg)),
                               n_heart_power=sum(!is.na(power.avg) & !is.na(hrmax.activity))), by='ath.id', all=T) %>%
-  mutate(perc_heart=round(n_heart/total_activities*100,2),perc_power = round(n_power/total_activities*100,2), perc_heart_power = round(n_heart_power/total_activities*100,2)) %>% 
+  mutate(perc_heart = round(n_heart/total_activities*100,1),
+         perc_heart_chest = round(n_heart_chest/n_heart * 100, 1),
+         perc_power = round(n_power/total_activities*100,1),
+         perc_heart_power = round(n_heart_power/total_activities*100,1)) %>% 
   arrange(ath.id)
 # add error and duplicate count
 for (i in ath.info$name) {
@@ -426,10 +469,11 @@ for (i in ath.info$ath.id) {
 
 #merge with newzones and nice order
 ath.full.info <- merge(ath.info,tp.newzones,by="ath.id") %>% 
-  select(-name.y,-starts_with("month"),-full_2years) %>% 
+  select(-name.y) %>% 
   rename(name=name.x) %>% 
   relocate(any_of(c("n_error","n_duplicates")),.after=total_activities) %>% 
   relocate(perc_heart,.after=n_heart) %>% 
+  relocate(perc_heart_chest, .after=n_heart_chest) %>%
   relocate(perc_power,.after=n_power)
 
 ath.full.info
@@ -438,7 +482,7 @@ ath.full.info
 add new calculations for test dates
 
 ```{r}
-ath.info.test <- merge(ath.full.info, ath.coviddates, by.x="name", by.y="athlete", all = T) %>% 
+ath.info.test <- merge(ath.full.info, athlete_covid_dates %>% select(-MaxHR), by.x="name", by.y="athlete", all = T) %>% 
   relocate(name,.after=ath.id) %>% 
   arrange(ath.id)
 
@@ -456,7 +500,9 @@ for (i in ath.info.test$ath.id) {
   ath.activities <- all.activities %>% filter(ath.id==i)
   covid_dates <- c(ath.info.test$diagnose_date[ath.info.test$ath.id == i],
                    ath.info.test$vax_1[ath.info.test$ath.id == i],
-                   ath.info.test$vax_2[ath.info.test$ath.id == i])
+                   ath.info.test$vax_2[ath.info.test$ath.id == i],
+                   ath.info.test$vax_3[ath.info.test$ath.id == i],
+                   ath.info.test$vax_4[ath.info.test$ath.id == i])
   for (date_i in seq_len(length(covid_dates))) {
     if (date_i == 1){
       t = "covid"
@@ -464,10 +510,17 @@ for (i in ath.info.test$ath.id) {
     } else if (date_i == 2){
       t = "vax1"
       t.date = covid_dates[date_i]
-    } else {
+    } else if (date_i == 3){
       t = "vax2"
       t.date = covid_dates[date_i]
+    } else if (date_i == 4){
+      t = "vax3"
+      t.date = covid_dates[date_i]
+    } else {
+      t = "vax4"
+      t.date = covid_dates[date_i]
     }
+    
     # first, calculate pre-date features
     for (period in c("prevweek","prevfort","prevmonth")){
       days=case_when(period=="prevweek" ~ 7, period=="prevfort" ~ 14, period=="prevmonth" ~ 28, TRUE ~ 0)
