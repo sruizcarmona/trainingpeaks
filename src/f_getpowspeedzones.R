@@ -291,9 +291,10 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   ath.code <- ath.info$ath.id[ath.info$name == athlete]
   hrmax.athlete <- get.maxhr_tangent(hr_vs_all,ath.code)
   ath.info$tangent.maxHR[ath.info$name == athlete] <- hrmax.athlete
-  ath.info$maxHR[ath.info$name == athlete] <- if_else(isTRUE(labmaxHR), 
-                                                      max(maxHR, hrmax.athlete, na.rm=T),
-                                                      hrmax.athlete)
+  ath.info$maxHR[ath.info$name == athlete] <- hrmax.athlete
+      #if_else(isTRUE(labmaxHR), 
+       #                                               max(maxHR, hrmax.athlete, na.rm=T),
+        #                                              hrmax.athlete)
   hrmax.athlete <- ath.info$maxHR[ath.info$name == athlete]
   
   # remove activities with hr higher than updated maxHR
