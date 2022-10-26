@@ -49,6 +49,18 @@ onerow.df <- function(values,colnames){
 }
 
 ############################################################################################################
+## to get HHMMSS format of a time
+## 
+############################################################################################################
+get.hhmmss <- function(minutes){
+  h <- as.integer(minutes / 60)
+  m <- as.integer((minutes / 60 - h) * 60)
+  s <- round((minutes - m - h * 60) * 60, 0)
+  hhmmss <- paste(str_pad(c(h,m,s),2,pad="0"), collapse = "")
+  return(hhmmss)
+}
+
+############################################################################################################
 ## FUNCTION TO READ FILE 
 ## read file, find extension for format and return fitdata
 ## no matter what format it is, usable by both the HR determination and the activity
@@ -97,9 +109,18 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
   a$week <- format(date,"%W")
   a$start_time <- as.character(format(date,"%H:%M"))
   a$duration.min <- if (is.null(fitdata$session$total_timer)) {round((last(fitdata$record$timestamp)-first(fitdata$record$timestamp))/60,2)} else {round(fitdata$session$total_timer_time/60,2)}
+  a$duration.hhmmss <- get.hhmmss(a$duration.min)
   a$pause.min <- if(is.null(fitdata$session$total_elapsed_time)){NA}else{round((fitdata$session$total_elapsed_time-fitdata$session$total_timer_time)/60,2)}
   a$total_dist.km <- if(is.null(fitdata$session$total_distance)) {round(last(fitdata$record$distance/1000,2))} else {round(fitdata$session$total_distance/1000,2)}
-  a$cum_ascent.m <- if(is.null(fitdata$session$total_ascent)){NA}else{fitdata$session$total_ascent}
+  ###################
+  ## EXTRA STUFF
+  ## extracted from fitfile session info
+  a$sport_code   <- ifelse(!is.null(fitdata$session$sport),
+                           fitdata$session$sport,
+                           ifelse(!is.null(fitdata$sport$sport), 
+                                  fitdata$sport$sport,
+                                  NA))
+  a$sport_type   <- ifelse(is.na(a$sport_code), NA, names(sport_code)[sport_code == a$sport_code])
   # add info of sensor
   a$hr.sensor <- ifelse(120 %in% fitdata$device_info$device_type,TRUE,FALSE)
   # add info about device (brand and product code and name)
@@ -140,158 +161,48 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
     a$hrmax.intensity <- round(a$hrmax.perc * a$duration.min,1)
     a$hr.avg <- round(mean(smooth.hr,na.rm=T),1)
     # get hr.zones and times (standard %s)
-    hr.zones <- quantile(c(0:a$hrmax_athlete),probs=seq(0,1,by=0.1))
-    fd$hr.zones <- findInterval(smooth.hr,hr.zones[6:10])
+    # hr.zones <- quantile(c(0:a$hrmax_athlete),probs=seq(0,1,by=0.1))
+    hr.zones <- quantile(c(0:a$hrmax_athlete), probs = c(0, 0.61, 0.70, 0.75, 0.80, 0.84, 0.90, 1)) # FOR KRISTEL
+    fd$hr.zones <- findInterval(smooth.hr,hr.zones[2:8])
     hr.zones.table <- round(table(fd$hr.zones)/length(fd$hr.zones)*100,2)
-    hr.zones.table[c("0","1","2","3","4","5")[!c("0","1","2","3","4","5") %in% names(hr.zones.table)]] <- 0
-    a$hr.z01 <- as.numeric(hr.zones.table['1'] + hr.zones.table['0'])
-    a$hr.z2 <- as.numeric(hr.zones.table['2'])
-    a$hr.z3 <- as.numeric(hr.zones.table['3'])
-    a$hr.z4 <- as.numeric(hr.zones.table['4'])
-    a$hr.z5 <- as.numeric(hr.zones.table['5'])
-    a$hr.z1.time <- as.numeric(round(hr.zones.table['1']/100 * a$duration.min,1))
-    a$hr.z2.time <- as.numeric(round(hr.zones.table['2']/100 * a$duration.min,1))
-    a$hr.z3.time <- as.numeric(round(hr.zones.table['3']/100 * a$duration.min,1))
-    a$hr.z4.time <- as.numeric(round(hr.zones.table['4']/100 * a$duration.min,1))
-    a$hr.z5.time <- as.numeric(round(hr.zones.table['5']/100 * a$duration.min,1))
-    # same with vt zones
-    vt.zones <- quantile(c(0:a$hrmax_athlete),probs=c(0,0.83,0.94,1))
-    fd$vt.zones <- findInterval(smooth.hr,vt.zones)
-    vt.zones.table <- round(table(fd$vt.zones)/length(fd$vt.zones)*100,2)
-    vt.zones.table[c("1","2","3")[!c("1","2","3") %in% names(vt.zones.table)]] <- 0
-    a$vt.z1 <- as.numeric(vt.zones.table['1'])
-    a$vt.z2 <- as.numeric(vt.zones.table['2'])
-    a$vt.z3 <- as.numeric(vt.zones.table['3'])
-    a$vt.z1.time <- as.numeric(round(vt.zones.table['1']/100 * a$duration.min,1))
-    a$vt.z2.time <- as.numeric(round(vt.zones.table['2']/100 * a$duration.min,1))
-    a$vt.z3.time <- as.numeric(round(vt.zones.table['3']/100 * a$duration.min,1))
-    ############################# GOLD VT
-    # same with GOLD vt zones
-    goldvt.zones <- tp.newzones[tp.newzones$ath.id == ath.id,c(22:23)]
-    if (any(is.na(goldvt.zones))){
-      a <- cbind(a, onerow.df(NA,colnames=c("goldvt.z1","goldvt.z2","goldvt.z3",
-                                            "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time")))
-    } else {
-      fd$goldvt.zones <- findInterval(smooth.hr,goldvt.zones) + 1
-      goldvt.zones.table <- round(table(fd$goldvt.zones)/length(fd$goldvt.zones)*100,2)
-      goldvt.zones.table[c("1","2","3")[!c("1","2","3") %in% names(goldvt.zones.table)]] <- 0
-      a$goldvt.z1 <- as.numeric(goldvt.zones.table['1'])
-      a$goldvt.z2 <- as.numeric(goldvt.zones.table['2'])
-      a$goldvt.z3 <- as.numeric(goldvt.zones.table['3'])
-      a$goldvt.z1.time <- as.numeric(round(goldvt.zones.table['1']/100 * a$duration.min,1))
-      a$goldvt.z2.time <- as.numeric(round(goldvt.zones.table['2']/100 * a$duration.min,1))
-      a$goldvt.z3.time <- as.numeric(round(goldvt.zones.table['3']/100 * a$duration.min,1))
-    }
-    ############################# END GOLD VT
-    # calculate trimp scores
-    a$etrimp <- round(a$hr.z1.time * 1 + a$hr.z2.time * 2 + a$hr.z3.time * 3 + a$hr.z4.time * 4 + a$hr.z5.time * 5,2)
-    a$lutrimp <- round(a$vt.z1.time * 1 + a$vt.z2.time * 2 + a$vt.z3.time * 3,2)
-    # trimp goldvt
-    if (any(is.na(goldvt.zones))){
-      a$lutrimp.goldvt <- NA
-    } else {
-      a$lutrimp.goldvt <- round(a$goldvt.z1.time * 1 + a$goldvt.z2.time * 2 + a$goldvt.z3.time * 3,2)
-    }
+    hr.zones.table[c("0","1","2","3","4","5","6")[!c("0","1","2","3","4","5","6") %in% names(hr.zones.table)]] <- 0
+    a$hr.z61 <- as.numeric(hr.zones.table['0'])
+    a$hr.z70 <- as.numeric(hr.zones.table['1'])
+    a$hr.z75 <- as.numeric(hr.zones.table['2'])
+    a$hr.z80 <- as.numeric(hr.zones.table['3'])
+    a$hr.z84 <- as.numeric(hr.zones.table['4'])
+    a$hr.z90 <- as.numeric(hr.zones.table['5'])
+    a$hr.z100 <- as.numeric(hr.zones.table['6'])
+    a$hr.total75 <- a$hr.z61 + a$hr.z70 + a$hr.z75
+    a$hr.total85 <- a$hr.z90 + a$hr.z100
+    a$hr.z61.time <- as.numeric(round(hr.zones.table['0']/100 * a$duration.min,2))
+    a$hr.z70.time <- as.numeric(round(hr.zones.table['1']/100 * a$duration.min,2))
+    a$hr.z75.time <- as.numeric(round(hr.zones.table['2']/100 * a$duration.min,2))
+    a$hr.z80.time <- as.numeric(round(hr.zones.table['3']/100 * a$duration.min,2))
+    a$hr.z84.time <- as.numeric(round(hr.zones.table['4']/100 * a$duration.min,2))
+    a$hr.z90.time <- as.numeric(round(hr.zones.table['5']/100 * a$duration.min,2))
+    a$hr.z100.time <- as.numeric(round(hr.zones.table['6']/100 * a$duration.min,2))
+    a$hr.total75.time <- as.numeric(round(a$hr.total75/100 * a$duration.min,2))
+    a$hr.total85.time <- as.numeric(round(a$hr.total85/100 * a$duration.min,2))
+    a$hr.z61.hhmmss <- get.hhmmss(a$hr.z61.time)
+    a$hr.z70.hhmmss <- get.hhmmss(a$hr.z70.time)
+    a$hr.z75.hhmmss <- get.hhmmss(a$hr.z75.time)
+    a$hr.z80.hhmmss <- get.hhmmss(a$hr.z80.time)
+    a$hr.z84.hhmmss <- get.hhmmss(a$hr.z84.time)
+    a$hr.z90.hhmmss <- get.hhmmss(a$hr.z90.time)
+    a$hr.z100.hhmmss <- get.hhmmss(a$hr.z100.time)
+    a$hr.total75.hhmmss <- get.hhmmss(a$hr.total75.time)
+    a$hr.total85.hhmmss <- get.hhmmss(a$hr.total85.time)
   } else {
     # add same columns with NA
     a <- cbind(a, onerow.df(NA,colnames=c("hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
-                                          "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
-                                          "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
-                                          "vt.z1","vt.z2","vt.z3","vt.z1.time","vt.z2.time","vt.z3.time",
-                                          "goldvt.z1","goldvt.z2","goldvt.z3",
-                                          "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time",
-                                          "etrimp","lutrimp",
-                                          "lutrimp.goldvt")))
+                                          "hr.z61","hr.z70","hr.z75","hr.z80","hr.z84","hr.z90","hr.z100",
+                                          "hr.total75", "hr.total85",
+                                          "hr.z61.time","hr.z70.time","hr.z75.time","hr.z80.time","hr.z84.time","hr.z90.time","hr.z100.time",
+                                          "hr.total75.time", "hr.total85.time",
+                                          "hr.z61.hhmmss","hr.z70.hhmmss","hr.z75.hhmmss","hr.z80.hhmmss","hr.z84.hhmmss","hr.z90.hhmmss","hr.z100.hhmmss",
+                                          "hr.total75.hhmmss", "hr.total85.hhmmss")))
   }
-  ###################
-  # get info from power
-  # check that power is present in fitdata and its above 10%, otherwise return NA
-  pow.cor.check <- tp.newzones$pow.cor[tp.newzones$ath.id == ath.id]
-  if ("power" %in% names(fd) & sum(!is.na(fd$power))/length(fd$power) > 0.1 & !(is.na(pow.cor.check))) {
-    smooth.pow <- smooth.data(fd$power,100)
-    smooth.pow <- smooth.pow[smooth.pow != "NaN" & smooth.pow != 0 & !is.na(smooth.pow)]
-    # get zones
-    pow.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(7:11)]
-    pow.zones <- findInterval(smooth.pow,pow.zones.table)
-    pow.zones.summary <- round(table(pow.zones)/length(pow.zones)*100,2)
-    pow.zones.summary[c("0","1","2","3","4","5")[!c("0","1","2","3","4","5") %in% names(pow.zones.summary)]] <- 0
-    pow.z1.time <- as.numeric(round(pow.zones.summary['1']/100 * a$duration.min,1))
-    pow.z2.time <- as.numeric(round(pow.zones.summary['2']/100 * a$duration.min,1))
-    pow.z3.time <- as.numeric(round(pow.zones.summary['3']/100 * a$duration.min,1))
-    pow.z4.time <- as.numeric(round(pow.zones.summary['4']/100 * a$duration.min,1))
-    pow.z5.time <- as.numeric(round(pow.zones.summary['5']/100 * a$duration.min,1))
-    # same with vt zones
-    pow.vt.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(12:13)]
-    pow.vt.zones <- findInterval(smooth.pow,pow.vt.zones.table) + 1 # add one to correct, as zone 0 should be 1, etc
-    pow.vt.zones.summary <- round(table(pow.vt.zones)/length(pow.vt.zones)*100,2)
-    pow.vt.zones.summary[c("1","2","3")[!c("1","2","3") %in% names(pow.vt.zones.summary)]] <- 0
-    pow.vt.z1.time <- as.numeric(round(pow.vt.zones.summary['1']/100 * a$duration.min,1))
-    pow.vt.z2.time <- as.numeric(round(pow.vt.zones.summary['2']/100 * a$duration.min,1))
-    pow.vt.z3.time <- as.numeric(round(pow.vt.zones.summary['3']/100 * a$duration.min,1))
-    # new trimp.pow scores
-    a$etrimp.power <- round(pow.z1.time*1 + pow.z2.time*2 + pow.z3.time*3 + pow.z4.time*4 + pow.z5.time*5,2)
-    a$lutrimp.power <- round(pow.vt.z1.time * 1 + pow.vt.z2.time * 2 + pow.vt.z3.time * 3,2)
-  } else {
-    a <- cbind(a, onerow.df(NA,colnames=c("etrimp.power","lutrimp.power")))
-  }
-  ###################
-  # get info from speed
-  # check that speed is present in fitdata and its above 10%, otherwise return NA
-  speed.cor.check <- tp.newzones$speed.cor[tp.newzones$ath.id == ath.id]
-  if ("speed" %in% names(fd) & sum(!is.na(fd$speed))/length(fd$speed) > 0.1) {
-    # smooth speed
-    # remove Inf from fd$speed
-    smooth.speed <- smooth.data(3.79*fd$speed[is.finite(fd$speed)],20)
-    smooth.speed <- smooth.speed[smooth.speed != "NaN" & !is.na(smooth.speed)]
-    # run trimp scores, only if speedcorcheck exists and its higher than 0.2
-    if(is.na(speed.cor.check) | speed.cor.check < 0.2) {
-      a <- cbind(a, onerow.df(NA,colnames=c("etrimp.speed","lutrimp.speed")))
-    } else {
-      # get zones
-      speed.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(15:19)]
-      speed.zones <- findInterval(smooth.speed,speed.zones.table)
-      speed.zones.summary <- round(table(speed.zones)/length(speed.zones)*100,2)
-      speed.zones.summary[c("0","1","2","3","4","5")[!c("0","1","2","3","4","5") %in% names(speed.zones.summary)]] <- 0
-      speed.z1.time <- as.numeric(round(speed.zones.summary['1']/100 * a$duration.min,1))
-      speed.z2.time <- as.numeric(round(speed.zones.summary['2']/100 * a$duration.min,1))
-      speed.z3.time <- as.numeric(round(speed.zones.summary['3']/100 * a$duration.min,1))
-      speed.z4.time <- as.numeric(round(speed.zones.summary['4']/100 * a$duration.min,1))
-      speed.z5.time <- as.numeric(round(speed.zones.summary['5']/100 * a$duration.min,1))
-      # same with vt zones
-      speed.vt.zones.table <- tp.newzones[tp.newzones$ath.id == ath.id,c(20:21)]
-      speed.vt.zones <- findInterval(smooth.speed,speed.vt.zones.table) + 1
-      speed.vt.zones.summary <- round(table(speed.vt.zones)/length(speed.vt.zones)*100,2)
-      speed.vt.zones.summary[c("1","2","3")[!c("1","2","3") %in% names(speed.vt.zones.summary)]] <- 0
-      speed.vt.z1.time <- as.numeric(round(speed.vt.zones.summary['1']/100 * a$duration.min,1))
-      speed.vt.z2.time <- as.numeric(round(speed.vt.zones.summary['2']/100 * a$duration.min,1))
-      speed.vt.z3.time <- as.numeric(round(speed.vt.zones.summary['3']/100 * a$duration.min,1))
-      # new trimp.speed scores
-      a$etrimp.speed <- round(speed.z1.time*1 + speed.z2.time*2 + speed.z3.time*3 + speed.z4.time*4 + speed.z5.time*5,2)
-      a$lutrimp.speed <- round(speed.vt.z1.time * 1 + speed.vt.z2.time * 2 + speed.vt.z3.time * 3,2)
-    }
-    # extra speed stuff
-    a$speed.avg <- round(mean(smooth.speed,na.rm=T),1)
-    a$speed.max <- round(max(smooth.speed,na.rm=T),1)
-  } else {
-    a <- cbind(a, onerow.df(NA,colnames=c("etrimp.speed","lutrimp.speed","speed.avg","speed.max")))
-  }
-  ###################
-  ## EXTRA STUFF
-  ## extracted from fitfile session info
-  a$sport_code   <- ifelse(!is.null(fitdata$session$sport),
-                           fitdata$session$sport,
-                           ifelse(!is.null(fitdata$sport$sport), 
-                                  fitdata$sport$sport,
-                                  NA))
-  a$sport_type   <- ifelse(is.na(a$sport_code), NA, names(sport_code)[sport_code == a$sport_code])
-  a$cal          <- if (is.null(fitdata$session$total_calories)) {NA} else {fitdata$session$total_calories}
-  a$power.max    <- if (is.null(fitdata$session$max_power)) {NA} else {fitdata$session$max_power}
-  a$power.avg    <- if (is.null(fitdata$session$avg_power)) {NA} else {fitdata$session$avg_power}
-  a$power.norm   <- if (is.null(fitdata$session$normalized_power)) {NA} else {fitdata$session$normalized_power}
-  a$work         <- if (is.null(fitdata$session$total_work)) {NA} else {fitdata$session$total_work}
-  a$stress.score <- if (is.null(fitdata$session$training_stress_score)) {NA} else {fitdata$session$training_stress_score}
-  a$intensity.factor <- if (is.null(fitdata$session$intensity_factor)) {NA} else {fitdata$session$intensity_factor}
-  a$training.effect <- if (is.null(fitdata$session$total_training_effect)) {NA} else {fitdata$session$total_training_effect}
   return(a)
 }
 
@@ -345,10 +256,10 @@ process.fitfile <- function(file,ath.id) {
     return(act.err)
   }
   # act hr higher than maxhr
-  if(!is.na(act$hrmax.activity) & act$hrmax.activity > act$hrmax_athlete) {
-    act.err <- onerow.df(c(ath.id,rep('activity error (maxHR too high)',length(act.err.names)-2),file),act.err.names)
-    return(act.err)
-  }
+  # if(!is.na(act$hrmax.activity) & act$hrmax.activity > act$hrmax_athlete) {
+  #   act.err <- onerow.df(c(ath.id,rep('activity error (maxHR too high)',length(act.err.names)-2),file),act.err.names)
+  #   return(act.err)
+  # }
   # timestamp missing
   if(is.na(act$date)) {
     act.err <- onerow.df(c(ath.id,rep('activity error (missing timestamp)',length(act.err.names)-2),file),act.err.names)
@@ -357,16 +268,6 @@ process.fitfile <- function(file,ath.id) {
   # wrong year (in the future), hard to find an auto fix and only 1 or 2 examples
   if (act$year > as.numeric(format(as.Date(Sys.Date()),"%Y"))) {
     act.err <- onerow.df(c(ath.id,rep('activity error (wrong year)',length(act.err.names)-2),file), act.err.names)
-    return(act.err)
-  }
-  # average speed higher than 65km/h, as its probably an error activity while driving
-  if (!is.na(act$speed.avg) & act$speed.avg > 65) {
-    act.err <- onerow.df(c(ath.id,rep('activity error (speed avg too high)',length(act.err.names)-2),file), act.err.names)
-    return(act.err)
-  }
-  # suunto watch (we have seen they are very unreliable)
-  if (!is.na(act$device_brand_id) & act$device_brand_id == 23) {
-    act.err <- onerow.df(c(ath.id, rep('activity error (suunto device, unreliable)', length(act.err.names)-2), file), act.err.names)
     return(act.err)
   }
   ###################
