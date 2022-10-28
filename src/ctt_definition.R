@@ -9,8 +9,12 @@
 ## https://developer.garmin.com/connect-iq/api-docs/Toybox/ActivityRecording.html
 ########################
 
-sport_code <- c(0,1,2,5,10,15)
-names(sport_code) <- c("Undefined","Running","Cycling","Swimming","Cardio","Rowing")
+sport_code <- c(0,1,2,5,
+                10,11,12,13,14,
+                15,16,17)
+names(sport_code) <- c("Undefined","Running","Cycling","Swimming",
+                       "Cardio","Walking", "XCSki", "AlpineSki", "Snowboard",
+                       "Rowing", "Mountaineering", "Hiking")
 
 ########################
 #### column names for activity errors
