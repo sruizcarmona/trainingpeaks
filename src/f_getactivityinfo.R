@@ -162,46 +162,46 @@ get.act_info_from_fitdata <- function(fitdata, ath.id) {
     a$hr.avg <- round(mean(smooth.hr,na.rm=T),1)
     # get hr.zones and times (standard %s)
     # hr.zones <- quantile(c(0:a$hrmax_athlete),probs=seq(0,1,by=0.1))
-    hr.zones <- quantile(c(0:a$hrmax_athlete), probs = c(0, 0.61, 0.70, 0.75, 0.80, 0.84, 0.90, 1)) # FOR KRISTEL
+    hr.zones <- quantile(c(0:a$hrmax_athlete), probs = c(0, 0.61, 0.71, 0.76, 0.81, 0.85, 0.90, 1)) # FOR KRISTEL
     fd$hr.zones <- findInterval(smooth.hr,hr.zones[2:8])
     hr.zones.table <- round(table(fd$hr.zones)/length(fd$hr.zones)*100,2)
     hr.zones.table[c("0","1","2","3","4","5","6")[!c("0","1","2","3","4","5","6") %in% names(hr.zones.table)]] <- 0
     a$hr.z61 <- as.numeric(hr.zones.table['0'])
-    a$hr.z70 <- as.numeric(hr.zones.table['1'])
-    a$hr.z75 <- as.numeric(hr.zones.table['2'])
-    a$hr.z80 <- as.numeric(hr.zones.table['3'])
-    a$hr.z84 <- as.numeric(hr.zones.table['4'])
+    a$hr.z71 <- as.numeric(hr.zones.table['1'])
+    a$hr.z76 <- as.numeric(hr.zones.table['2'])
+    a$hr.z81 <- as.numeric(hr.zones.table['3'])
+    a$hr.z85 <- as.numeric(hr.zones.table['4'])
     a$hr.z90 <- as.numeric(hr.zones.table['5'])
     a$hr.z100 <- as.numeric(hr.zones.table['6'])
-    a$hr.total75 <- a$hr.z61 + a$hr.z70 + a$hr.z75
+    a$hr.total76 <- a$hr.z61 + a$hr.z71 + a$hr.z76
     a$hr.total85 <- a$hr.z90 + a$hr.z100
     a$hr.z61.time <- as.numeric(round(hr.zones.table['0']/100 * a$duration.min,2))
-    a$hr.z70.time <- as.numeric(round(hr.zones.table['1']/100 * a$duration.min,2))
-    a$hr.z75.time <- as.numeric(round(hr.zones.table['2']/100 * a$duration.min,2))
-    a$hr.z80.time <- as.numeric(round(hr.zones.table['3']/100 * a$duration.min,2))
-    a$hr.z84.time <- as.numeric(round(hr.zones.table['4']/100 * a$duration.min,2))
+    a$hr.z71.time <- as.numeric(round(hr.zones.table['1']/100 * a$duration.min,2))
+    a$hr.z76.time <- as.numeric(round(hr.zones.table['2']/100 * a$duration.min,2))
+    a$hr.z81.time <- as.numeric(round(hr.zones.table['3']/100 * a$duration.min,2))
+    a$hr.z85.time <- as.numeric(round(hr.zones.table['4']/100 * a$duration.min,2))
     a$hr.z90.time <- as.numeric(round(hr.zones.table['5']/100 * a$duration.min,2))
     a$hr.z100.time <- as.numeric(round(hr.zones.table['6']/100 * a$duration.min,2))
-    a$hr.total75.time <- as.numeric(round(a$hr.total75/100 * a$duration.min,2))
+    a$hr.total76.time <- as.numeric(round(a$hr.total76/100 * a$duration.min,2))
     a$hr.total85.time <- as.numeric(round(a$hr.total85/100 * a$duration.min,2))
     a$hr.z61.hhmmss <- get.hhmmss(a$hr.z61.time)
-    a$hr.z70.hhmmss <- get.hhmmss(a$hr.z70.time)
-    a$hr.z75.hhmmss <- get.hhmmss(a$hr.z75.time)
-    a$hr.z80.hhmmss <- get.hhmmss(a$hr.z80.time)
-    a$hr.z84.hhmmss <- get.hhmmss(a$hr.z84.time)
+    a$hr.z71.hhmmss <- get.hhmmss(a$hr.z71.time)
+    a$hr.z76.hhmmss <- get.hhmmss(a$hr.z76.time)
+    a$hr.z81.hhmmss <- get.hhmmss(a$hr.z81.time)
+    a$hr.z85.hhmmss <- get.hhmmss(a$hr.z85.time)
     a$hr.z90.hhmmss <- get.hhmmss(a$hr.z90.time)
     a$hr.z100.hhmmss <- get.hhmmss(a$hr.z100.time)
-    a$hr.total75.hhmmss <- get.hhmmss(a$hr.total75.time)
+    a$hr.total76.hhmmss <- get.hhmmss(a$hr.total76.time)
     a$hr.total85.hhmmss <- get.hhmmss(a$hr.total85.time)
   } else {
     # add same columns with NA
     a <- cbind(a, onerow.df(NA,colnames=c("hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
-                                          "hr.z61","hr.z70","hr.z75","hr.z80","hr.z84","hr.z90","hr.z100",
-                                          "hr.total75", "hr.total85",
-                                          "hr.z61.time","hr.z70.time","hr.z75.time","hr.z80.time","hr.z84.time","hr.z90.time","hr.z100.time",
-                                          "hr.total75.time", "hr.total85.time",
-                                          "hr.z61.hhmmss","hr.z70.hhmmss","hr.z75.hhmmss","hr.z80.hhmmss","hr.z84.hhmmss","hr.z90.hhmmss","hr.z100.hhmmss",
-                                          "hr.total75.hhmmss", "hr.total85.hhmmss")))
+                                          "hr.z61","hr.z71","hr.z76","hr.z81","hr.z85","hr.z90","hr.z100",
+                                          "hr.total76", "hr.total85",
+                                          "hr.z61.time","hr.z71.time","hr.z76.time","hr.z81.time","hr.z85.time","hr.z90.time","hr.z100.time",
+                                          "hr.total76.time", "hr.total85.time",
+                                          "hr.z61.hhmmss","hr.z71.hhmmss","hr.z76.hhmmss","hr.z81.hhmmss","hr.z85.hhmmss","hr.z90.hhmmss","hr.z100.hhmmss",
+                                          "hr.total76.hhmmss", "hr.total85.hhmmss")))
   }
   return(a)
 }

@@ -41,15 +41,16 @@ names(sport_code) <- c("Undefined","Running","Cycling","Swimming",
 #                   "speed.avg","speed.max","sport_code","sport_type","cal","power.max","power.avg","power.norm",
 #                   "work","stress.score","intensity.factor","training.effect","file")
 act.err.names <- c("ath.id","date","year","month","week","start_time",
-                   "duration.min","pause.min","total_dist.km","cum_ascent.m","hr.sensor",
+                   "duration.min", "duration.hhmmss", "pause.min","total_dist.km",
+                   "sport_code","sport_type", "hr.sensor",
                    "device_brand_id","device_brand_name","device_model_id","device_model_name","hrmax_athlete",
-                   "hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg","hr.z61",
-                   "hr.z70","hr.z75","hr.z80","hr.z84","hr.z90",
-                   "hr.z100","hr.total75","hr.total85","hr.z61.time","hr.z70.time",
-                   "hr.z75.time","hr.z80.time","hr.z84.time","hr.z90.time","hr.z100.time",
-                   "hr.total75.time","hr.total85.time","hr.z61.hhmmss","hr.z70.hhmmss","hr.z75.hhmmss",
-                   "hr.z80.hhmmss","hr.z84.hhmmss","hr.z90.hhmmss","hr.z100.hhmmss","hr.total75.hhmmss",
-                   "hr.total85.hhmmss","sport_code","sport_type", "file")
+                   "hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
+                   "hr.z61","hr.z71","hr.z76","hr.z81","hr.z85","hr.z90","hr.z100",
+                   "hr.total76", "hr.total85",
+                   "hr.z61.time","hr.z71.time","hr.z76.time","hr.z81.time","hr.z85.time","hr.z90.time","hr.z100.time",
+                   "hr.total76.time", "hr.total85.time",
+                   "hr.z61.hhmmss","hr.z71.hhmmss","hr.z76.hhmmss","hr.z81.hhmmss","hr.z85.hhmmss","hr.z90.hhmmss","hr.z100.hhmmss",
+                   "hr.total76.hhmmss", "hr.total85.hhmmss", "file")
 
 ########################
 #### get product and manufacturer
