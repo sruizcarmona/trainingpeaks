@@ -209,17 +209,7 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   } else {
     labmaxHR <- TRUE
   }
-  sel.dirs <- all.dirs.PH[str_detect(all.dirs.PH,athlete)]
-  # if (length(str_split(sel.dirs,"/")[[1]]) == 5){
-  #   sel.dirs <- list.dirs(sel.dirs)
-  # } else {
-  #   sel.dirs <- list.dirs(sel.dirs,recursive=F)
-  #   sel.dirs <- sel.dirs[str_detect(sel.dirs,"YEAR")]
-  # }
-  # files <- list.files(sel.dirs, pattern="*.*", full.names = TRUE)
-  files <- list.files(sel.dirs, pattern="*.*", recursive=T, full.names=T)
-  files <- files[!str_detect(files, ".zip$")]
-  #files <- list.files(sel.dirs,pattern=".fit",full.names = TRUE)
+  files <- get_list_files(athlete)
   # hr_vs_all <- data.frame(hr=character(), power=character(), speed=character(),
   #                         power.cor=character(), speed.cor=character(),sport=character(),
   #                         # maxhr=character(),
@@ -248,7 +238,8 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   if (is.null(hr_vs_all)){
     ath.info$maxHR[ath.info$name == athlete] <- ifelse(isTRUE(labmaxHR),
                                                       maxHR,
-                                                      NA)
+                                                      # instead of NA, will mark it as 1000, so it does not re-calculate each time
+                                                      1000)
     return(ath.info)
   }
   
@@ -281,7 +272,8 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   if (dim(hr_vs_all)[1] == 0){
     ath.info$maxHR[ath.info$name == athlete] <- ifelse(isTRUE(labmaxHR),
                                                        maxHR,
-                                                       NA)
+                                                       # instead of NA, will mark it as 1000, so it does not re-calculate each time
+                                                       1000)
     return(ath.info)
   }
   

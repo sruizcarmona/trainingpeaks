@@ -30,6 +30,7 @@ names(sport_code) <- c("Undefined","Running","Cycling","Swimming",
 #                    "total.dist","intensity.factor","training.effect","file")
 act.err.names <- c("ath.id","date","year","month","week","start_time","duration.min","pause.min","total_dist.km",
                    "cum_ascent.m","hr.sensor", "device_brand_id", "device_brand_name", "device_model_id", "device_model_name",
+                   "sport_code", "sport_type", 
                    "hrmax_athlete","hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
                    "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
                    "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
@@ -38,8 +39,16 @@ act.err.names <- c("ath.id","date","year","month","week","start_time","duration.
                    "goldvt.z1.time","goldvt.z2.time","goldvt.z3.time",
                    "etrimp","lutrimp","lutrimp.goldvt",
                    "etrimp.power","lutrimp.power","etrimp.speed","lutrimp.speed",
-                   "speed.avg","speed.max","sport_code","sport_type","cal","power.max","power.avg","power.norm",
+                   "speed.avg","speed.max","cal","power.max","power.avg","power.norm",
                    "work","stress.score","intensity.factor","training.effect","file")
+
+act.err.names.cmr <- c("ath.id","date","year","month","week","start_time","duration.min","pause.min","total_dist.km",
+                       "cum_ascent.m","hr.sensor", "device_brand_id", "device_brand_name", "device_model_id", "device_model_name",
+                       "sport_code", "sport_type", 
+                       "hrmax_athlete","hrmax.activity","hrmax.perc","hrmax.intensity","hr.avg",
+                       "hr.z01","hr.z2","hr.z3","hr.z4","hr.z5",
+                       "hr.z1.time","hr.z2.time","hr.z3.time","hr.z4.time","hr.z5.time",
+                       "etrimp","file")
 
 ########################
 #### get product and manufacturer

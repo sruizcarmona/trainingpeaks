@@ -1,46 +1,4 @@
----
-title: "Training Peaks"
-# output:
-#   html_notebook:
-#     toc: true
-#     toc_depth: 3
-#     toc_float:
-#       collapsed: false
-#       smooth_scroll: true
-#     theme: cosmo
-#     df_print: paged
-#     highlight: tango
-#     # code_folding: hide
-#     # fig_width: 12
-#     # fig_height: 12
-output:
-  epuRate::BAKER:
-    toc: TRUE
-    number_sections: FALSE
-    code_folding: "show"
----
-
-<script>
-$(document).ready(function() {
-  $items = $('div#TOC li');
-  $items.each(function(idx) {
-    num_ul = $(this).parentsUntil('#TOC').length;
-    $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
-  });
-
-});
-</script>
-
-***
-
-# TrainingPeaks Data
-
-## Preliminary tasks
-### Load Libraries
-
-Load libraries for reading fit data and create maps and plots.
-
-```{r warning=FALSE, results='hide', echo='FALSE'}
+## ----warning=FALSE, results='hide', echo='FALSE'------------------------------
 library(fit)
 library(ggplot2)
 library(dplyr)
@@ -54,32 +12,18 @@ library(geosphere)
 library(XML)
 library(tidyr)
 library(readr)
-```
 
-*** 
 
-# Activity per athlete
-
-> **Note**
->
-> We are missing personal data from all patients (Name, VO2max, Weight, etc.)
-
-## Initial set-up
-
-### Load src files
-
-```{r}
+## -----------------------------------------------------------------------------
 source('src/ctt_definition.R') # constant variables and files
 source('src/f_getactivityinfo.R') # main functions to get info from activity
 source('src/f_getpowspeedzones.R') # functions to get power/speed zones for new trimp scores
 source('src/f_getgpxactivity.R') # functions for reading gpx files
 source('src/f_getmaxhrtangent.R') # functions to get maxHR with tangent method
 source('src/f_gettcxactivity.R') # functions for reading tcx files
-```
 
-### Select athletes and directory
 
-```{r}
+## -----------------------------------------------------------------------------
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
 
@@ -92,9 +36,8 @@ ath.testdates2 <- readr::read_csv('../../2210_TRAININGPEAKS/athletes_PH_test_221
 ath.testdates3 <- readr::read_csv('../../2210_TRAININGPEAKS/elite_athletes_test_2210.csv',
                                    col_types = cols("c",
                                                     col_date(format="%d/%m/%Y")))
-ath.testdates <- rbind(ath.testdates, ath.testdates2, ath.testdates3)
 sel.athletes <- ath.testdates$ATHLETE
-# sel.athletes <- c(sel.athletes, ath.testdates2$ATHLETE, ath.testdates3$ATHLETE)
+sel.athletes <- c(sel.athletes, ath.testdates2$ATHLETE, ath.testdates3$ATHLETE)
 
 # sel.athletes <- read_csv("../../2210_TRAININGPEAKS/athletes_MH_test_2210.csv")
 # sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
@@ -107,19 +50,15 @@ sel.athletes <- ath.testdates$ATHLETE
 ph_folders1 <- list.dirs('../../2210_TRAININGPEAKS/MASTER_HEART',recursive = F)
 ph_folders2 <- list.dirs(list.dirs('../../2210_TRAININGPEAKS/PRO_HEART',recursive = F),recursive=F)
 all.dirs.PH <- c(ph_folders1, ph_folders2)
-```
 
-### Load previous results
 
-```{r}
+## -----------------------------------------------------------------------------
 if(file.exists('out/rdas/tpeaks_newzones_cmr.rda')){
   load('out/rdas/tpeaks_newzones_cmr.rda')
 }
-```
 
-### Load test maxHR data, lab goldVT values and test dates
 
-```{r}
+## -----------------------------------------------------------------------------
 ####################################################
 #### maxHR
 # if (file.exists('data/athlete_maxHR.txt')){
@@ -207,18 +146,9 @@ if(file.exists('out/rdas/tpeaks_newzones_cmr.rda')){
 #   # filter(n==2) %>%
 #   filter(row_number()==1) %>%
 #   ungroup()
-```
 
-***
 
-## Step 1
-
-First of all, we will check if the athlete has already been processed
-
-* MaxHR has been calculated from all the activities
-* Power/Speed zones have been determined
-
-```{r}
+## -----------------------------------------------------------------------------
 # rm(tp.newzones)
 ###################
 # initialize cluster
@@ -308,25 +238,9 @@ stopCluster(cl)
 # save everything in a file, so we don't need to calculate them every time
 save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
 tp.newzones
-```
 
-***
 
-## Step 2
-
-Now we have all athletes with the maxHR determined in the lab or by the activity data (the highest) and the power/speed zones calculated and saved in a file.
-
-Next step is to get all the files and compute all what we need.
-
-There are different checks to be sure that the activity is processed and saved correctly:
-
-* The file is a fit file and is readable by the fit package
-* The activity contains data and is longer than 1 min
-* There are no errors processing the file (year in the future, time jumps, etc)
-
-### Read files for each of the athlete
-
-```{r}
+## -----------------------------------------------------------------------------
 tpeaks.all <- NULL
 ###################
 # initialize cluster
@@ -370,17 +284,9 @@ stopCluster(cl)
 # save everything in a file, so we don't need to calculate them every time
 # save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
-```
 
-***
 
-## Step 3
-
-### SUMMARIZE STUFF
-
-split training.all into correct sessions, duplicate and error
-
-```{r}
+## -----------------------------------------------------------------------------
 # levels(training.all$file) <- c(levels(training.all$file),"PRO_HEART/AUS_PH/BENTLEYOLDEN/FULL_2YEARS/kk.fit","PRO_HEART/AUS_PH/BENTLEYOLDEN/MONTH_2YEARS/2018-09-28-203213-ELEMNT 3AE9-91-0.fit")
 # training.all[8,]$file <- "PRO_HEART/AUS_PH/BENTLEYOLDEN/FULL_2YEARS/kk.fit"
 # training.all[7,]$file <- "PRO_HEART/AUS_PH/BENTLEYOLDEN/MONTH_2YEARS/2018-09-28-203213-ELEMNT 3AE9-91-0.fit"
@@ -439,11 +345,9 @@ all.activities <- all.activities %>%
   mutate_if(is.factor, as.character) %>%
   filter(id == 1) %>% 
   select(-source, -id)
-```
 
-populate ath.info
 
-```{r}
+## -----------------------------------------------------------------------------
 # cohort_vs_athlete <- as.data.frame(t(do.call("cbind",str_split(str_remove(all.dirs.PH,".*TRAININGPEAKS/"),"/"))),
                                    # stringsAsFactors = F)
 cohort_vs_athlete <- str_split(str_remove(all.dirs.PH,".*TRAININGPEAKS/"),"/")
@@ -499,19 +403,16 @@ ath.full.info <- merge(ath.info,tp.newzones,by="ath.id") %>%
   relocate(perc_heart_chest, .after=n_heart_chest)
   
 ath.full.info
-```
 
-add new calculations for test dates
 
-```{r}
-ath.info.test <- merge(ath.full.info, ath.testdates, by.x = "name", by.y = "ATHLETE" , all = T) %>% 
+## -----------------------------------------------------------------------------
+ath.info.test <- merge(ath.full.info, ath.testdates, by.x = "name", by.y = "ATHLETE" , all = F) %>% 
   relocate(name,.after=ath.id) %>% 
   arrange(ath.id) %>% 
   rename(test_date_1 = TEST_DATE)
-```
 
 
-```{r}
+## -----------------------------------------------------------------------------
 # add total time and time per zones
 hr_summary <- all.activities %>%
   # remove activities without HR
@@ -555,11 +456,9 @@ res <- ath.info.test
 # res <- ath.info.test %>% 
 #   select(ath.id,name,total_activities, test_date_1,test_date_2)
 # res
-```
 
 
-
-```{r}
+## -----------------------------------------------------------------------------
 for (i in ath.info.test$ath.id) {
 # for (i in "BA_002") {
   ath.activities <- all.activities %>% filter(ath.id==i) %>% filter(!is.na(sport_type))
@@ -959,9 +858,9 @@ for (i in ath.info.test$ath.id) {
 # 
 # res
 ath.info.test <- res
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # 
 # # add error and duplicate count
 # i <- "BA_003"
@@ -1001,15 +900,14 @@ ath.info.test <- res
 # }
 # wk_mon
 # mean(wk_mon)/sd(wk_mon)
-```
 
 
-```{r}
+## -----------------------------------------------------------------------------
 save(ath.info.test, tp.newzones, tpeaks.all, all.activities, error.sessions, dup.sessions, file=
        paste0("out/rdas/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".rda"))
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # load('trainingpeaks_data_PARALLEL_200701.rda')
 # 
 # save CSV
@@ -1026,4 +924,4 @@ sheet_list <- list("athletes"= ath.info.test,
                    "duplicates"=dup.sessions)
 write.xlsx(sheet_list, keepNA=TRUE,
            file=paste0("out/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
-```
+

@@ -69,13 +69,38 @@ create_fitdata <- function(f) {
     # if here, it means there is no known extension, so will try fit > gpx > tcx and see if any works
     fitdata <- try(read.fit(f),silent=T)
     if (class(fitdata) == "try-error"){
-      fitdata <- try(create.fitdata_from_gpx(f),silent=T)
-      if (class(fitdata) == "try-error"){
         fitdata <- try(create.fitdata_from_tcx(f),silent=T)
+      if (class(fitdata) == "try-error"){
+          fitdata <- try(create.fitdata_from_gpx(f),silent=T)
+          if (class(fitdata) != "try-error") {
+            # the file is a gpx, rename
+            # file.rename(f, paste0(f, ".gpx"))
+          }
+      } else {
+        # the file is a tcx, rename
+        # file.rename(f, paste0(f, ".tcx"))
       }
+    } else {
+      # the file is a fit file, rename
+      # file.rename(f, paste0(f, ".fit"))
     }
   }
   return(fitdata)
+}
+
+############################################################################################################
+## GET FILES FOR ATHLETE 
+## given an athlete name, look for all the files and return list
+###
+## input athlete name
+## output dlist of files
+############################################################################################################
+
+get_list_files <- function(athlete) {
+  sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, paste0("/",athlete, "$"))]
+  files <- list.files(sel.dirs.tmp, pattern="*.*", recursive=T, full.names=T)
+  files <- files[!str_detect(files, ".zip$")]
+  return(files)
 }
 
 ############################################################################################################
@@ -331,15 +356,18 @@ process.fitfile <- function(file, ath.id, cmr = FALSE) {
   # read file and create fitdata
   fitdata <- create_fitdata(file)
   ###################
+  if(cmr == TRUE) {
+    act.err.names <- act.err.names.cmr
+  }
   # check errors in file or before processing the activity
   # skip files with errors
   if (class(fitdata) == "try-error"){
     if (str_detect(file,"\\.pwx|\\.PWX")) {
-      act.err <- onerow.df(c(ath.id,rep('file error (PWX format)',length(act.err.names)-2),file), act.err.names)
+      act.err <- onerow.df(c(ath.id,rep('file error (PWX format)', length(act.err.names)-2),file), act.err.names)
     } else if (str_detect(file,"\\.srm|\\.SRM")) {
-      act.err <- onerow.df(c(ath.id,rep('file error (SRM format)',length(act.err.names)-2),file), act.err.names)
+      act.err <- onerow.df(c(ath.id,rep('file error (SRM format)', length(act.err.names)-2),file), act.err.names)
     } else {
-      act.err <- onerow.df(c(ath.id,rep('file error (reading)',length(act.err.names)-2),file), act.err.names)
+      act.err <- onerow.df(c(ath.id,rep('file error (reading)', length(act.err.names)-2),file), act.err.names)
     }
     return(act.err)
   }
