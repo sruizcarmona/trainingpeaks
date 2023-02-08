@@ -33,6 +33,7 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0
            deriv = smooth.data(deriv, 20, r=1000),
            # add second derivative as a filter to avoid min/max and focus on slopes (removing all on the bottom and top 10%)
            deriv2 = (deriv - lag(deriv)) / (x - lag(x)),
+           #SRC 2301
            score_deriv2 = ifelse(deriv2 < quantile(deriv2, na.rm=T, d2f) | deriv2 > quantile(deriv2, na.rm=T, 1-d2f), 0, 1),
            yinterc = y - x*deriv,
            xinterc = round(-yinterc/deriv,0),
@@ -76,8 +77,9 @@ process_maxhr_activity <- function(myact, w_e, w_d, w_x, w_h, nlag = 10, d2f = 0
                                        score_error / 5,
                                        score_error)),
            # add inflexion points (some plots with inflex points at the end are giving errors)
-           score_deriv2 = ifelse(any(x < (loc_inflex$x + 1) & x > (loc_inflex$x - 1)),
-                                 1, score_deriv2)
+           #SRC 2301
+           score_inflex = ifelse(any(x < (loc_inflex$x + 1) & x > (loc_inflex$x - 1)),
+                                 1, 0)
     ) %>% 
     ungroup() %>% 
     mutate(highness = scale(highness**3) + abs(min(scale(highness**3), na.rm=T)),
@@ -151,8 +153,9 @@ get.maxhr_tangent <- function(hr_vs_all,ath.code) {
   }
   
   # weights obtained in "optim" folder with an optimization of 150 individuals with a grid search approach
-  pdata <- process_maxhr_activity(sourcedata, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
-
+  # pdata <- process_maxhr_activity(sourcedata, w_e = 80, w_d = 1, w_x = 4, w_h = 0, nlag = 10, d2f = 0.2)
+  pdata <- process_maxhr_activity(sourcedata, w_e = 64, w_d = 1, w_x = 2, w_h = 0, nlag = 10, d2f = 0.01)
+  
   best_row <- pdata %>% arrange(-optim) %>% filter(row_number() == 1)
   yinterc <- best_row$yinterc
   xinterc <- best_row$xinterc

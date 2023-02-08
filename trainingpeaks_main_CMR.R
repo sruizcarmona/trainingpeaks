@@ -36,8 +36,9 @@ ath.testdates2 <- readr::read_csv('../../2210_TRAININGPEAKS/athletes_PH_test_221
 ath.testdates3 <- readr::read_csv('../../2210_TRAININGPEAKS/elite_athletes_test_2210.csv',
                                    col_types = cols("c",
                                                     col_date(format="%d/%m/%Y")))
+ath.testdates <- rbind(ath.testdates, ath.testdates2, ath.testdates3)
 sel.athletes <- ath.testdates$ATHLETE
-sel.athletes <- c(sel.athletes, ath.testdates2$ATHLETE, ath.testdates3$ATHLETE)
+# sel.athletes <- c(sel.athletes, ath.testdates2$ATHLETE, ath.testdates3$ATHLETE)
 
 # sel.athletes <- read_csv("../../2210_TRAININGPEAKS/athletes_MH_test_2210.csv")
 # sel.athletes <- read.table("data/list_athletes.txt",stringsAsFactors = F)$V1
@@ -406,7 +407,7 @@ ath.full.info
 
 
 ## -----------------------------------------------------------------------------
-ath.info.test <- merge(ath.full.info, ath.testdates, by.x = "name", by.y = "ATHLETE" , all = F) %>% 
+ath.info.test <- merge(ath.full.info, ath.testdates, by.x = "name", by.y = "ATHLETE" , all = T) %>% 
   relocate(name,.after=ath.id) %>% 
   arrange(ath.id) %>% 
   rename(test_date_1 = TEST_DATE)
@@ -924,4 +925,11 @@ sheet_list <- list("athletes"= ath.info.test,
                    "duplicates"=dup.sessions)
 write.xlsx(sheet_list, keepNA=TRUE,
            file=paste0("out/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
+
+# negStyle <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
+# wb <- all.activities[1:10]
+# conditionalFormatting(wb, "cellIs", cols = 4, rows = 1:5, rule = ">0", style = negStyle)
+# t_act <- all.activities
+# write.xlsx(, keepNA=TRUE, firstActiveRow = 2, firstActiveCol = 3,
+#            file=paste0("out/test_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
 

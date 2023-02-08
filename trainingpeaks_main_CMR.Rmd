@@ -1026,4 +1026,11 @@ sheet_list <- list("athletes"= ath.info.test,
                    "duplicates"=dup.sessions)
 write.xlsx(sheet_list, keepNA=TRUE,
            file=paste0("out/trainingpeaks_results_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
+
+# negStyle <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
+# wb <- all.activities[1:10]
+# conditionalFormatting(wb, "cellIs", cols = 4, rows = 1:5, rule = ">0", style = negStyle)
+# t_act <- all.activities
+# write.xlsx(, keepNA=TRUE, firstActiveRow = 2, firstActiveCol = 3,
+#            file=paste0("out/test_",format(as.Date(Sys.Date()),format="%y%m%d"),".xlsx"))
 ```
