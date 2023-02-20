@@ -439,6 +439,19 @@ all.activities <- all.activities %>%
   mutate_if(is.factor, as.character) %>%
   filter(id == 1) %>% 
   select(-source, -id)
+
+# split z01 into z0 and z1 and all the respective times
+all.activities <- all.activities %>% 
+  mutate(hr.z1 = round(hr.z1.time / duration.min * 100, 2),
+         hr.z0 = round(hr.z01 - hr.z1, 2),
+         hr.z0.time = round(hr.z0/100 * duration.min, 1),
+         hr.z01.time = round(hr.z01/100 * duration.min, 1),
+         hr.zones.total.time = hr.z0.time + hr.z1.time + hr.z2.time + hr.z3.time + hr.z4.time + hr.z5.time,
+         hr.zones.total.perc = hr.z0 + hr.z1 + hr.z2 + hr.z3 + hr.z4 + hr.z5) %>% 
+  relocate(any_of(c("hr.z0","hr.z1")), .after = hr.z01) %>% 
+  relocate(any_of(c("hr.z01.time", "hr.z0.time")), .before = hr.z1.time) %>% 
+  relocate(hr.zones.total.time, .after = hr.z5.time) %>%
+  relocate(hr.zones.total.perc, .after = hr.z5)
 ```
 
 populate ath.info
@@ -519,17 +532,22 @@ hr_summary <- all.activities %>%
   group_by(ath.id) %>% 
   # filter(ath.id == "CMR_010") %>% 
   summarise(duration.min.total = sum(duration.min, na.rm = T),
+            hr.z0.min.total = sum(hr.z0.time, na.rm = T),
             hr.z1.min.total = sum(hr.z1.time, na.rm = T),
             hr.z2.min.total = sum(hr.z2.time, na.rm = T),
             hr.z3.min.total = sum(hr.z3.time, na.rm = T),
             hr.z4.min.total = sum(hr.z4.time, na.rm = T),
             hr.z5.min.total = sum(hr.z5.time, na.rm = T),
+            hr.zones.min.total = hr.z0.min.total + hr.z1.min.total + hr.z2.min.total + hr.z3.min.total + hr.z4.min.total + hr.z5.min.total,
+            # hr.zones.min.total.difference = round(hr.zones.min.total / duration.min.total * 100,1)
             ) %>% 
-  mutate(hr.z1.perc.total = round(hr.z1.min.total / duration.min.total * 100, 1),
+  mutate(hr.z0.perc.total = round(hr.z0.min.total / duration.min.total * 100, 1),
+         hr.z1.perc.total = round(hr.z1.min.total / duration.min.total * 100, 1),
          hr.z2.perc.total = round(hr.z2.min.total / duration.min.total * 100, 1),
          hr.z3.perc.total = round(hr.z3.min.total / duration.min.total * 100, 1),
          hr.z4.perc.total = round(hr.z4.min.total / duration.min.total * 100, 1),
-         hr.z5.perc.total = round(hr.z5.min.total / duration.min.total * 100, 1)) %>% 
+         hr.z5.perc.total = round(hr.z5.min.total / duration.min.total * 100, 1),
+         hr.zones.perc.total = hr.z0.perc.total + hr.z1.perc.total + hr.z2.perc.total + hr.z3.perc.total + hr.z4.perc.total + hr.z5.perc.total) %>% 
   rename(duration.min.total.withHR = duration.min.total)
 
 hr_summary_NOHR <- all.activities %>%
@@ -541,11 +559,9 @@ hr_summary_NOHR <- all.activities %>%
 hr_summary <- hr_summary %>% 
   left_join(hr_summary_NOHR, by = "ath.id") %>% 
   mutate(duration.min.total.noHR = ifelse(is.na(duration.min.total.noHR), 0, duration.min.total.noHR),
-         perc.total.withHR = duration.min.total.withHR / 
-           (duration.min.total.withHR + duration.min.total.noHR) * 100,
-         perc.total.withHR = round(perc.total.withHR, 1)) %>% 
-  relocate(duration.min.total.noHR, .after=duration.min.total.withHR) %>% 
-  relocate(perc.total.withHR, .after=duration.min.total.noHR)
+         duration.min.total = duration.min.total.withHR + duration.min.total.noHR,
+         perc.total.withHR = round(duration.min.total.withHR / duration.min.total * 100,1)) %>% 
+  relocate(duration.min.total.noHR, duration.min.total, perc.total.withHR, .after=duration.min.total.withHR)
 
 ath.info.test <- left_join(ath.info.test, hr_summary, by="ath.id")
 
@@ -667,48 +683,85 @@ for (i in ath.info.test$ath.id) {
           filter(as.Date(as.character(date),"%Y%m%d") < t.date,
                  as.Date(as.character(date),"%Y%m%d") >= t.date - days)
       }
-      ## HR ZONES PER TIME PERIOD SRC
+      
+      ######################################
+      # ## HR ZONES PER TIME PERIOD SRC
       hr_summary <- sport.period.activities %>%
         # remove activities without HR
-        # filter(!is.na(hrmax.activity)) %>% 
+        filter(!is.na(hrmax.activity)) %>%
         group_by(ath.id) %>% 
         # filter(ath.id == "CMR_010") %>% 
         summarise(duration.min.total = sum(duration.min, na.rm = T),
+                  hr.z0.min.total = sum(hr.z0.time, na.rm = T),
                   hr.z1.min.total = sum(hr.z1.time, na.rm = T),
                   hr.z2.min.total = sum(hr.z2.time, na.rm = T),
                   hr.z3.min.total = sum(hr.z3.time, na.rm = T),
                   hr.z4.min.total = sum(hr.z4.time, na.rm = T),
                   hr.z5.min.total = sum(hr.z5.time, na.rm = T),
+                  hr.zones.min.total = hr.z0.min.total + hr.z1.min.total + hr.z2.min.total + hr.z3.min.total + hr.z4.min.total + hr.z5.min.total,
+                  hr.zones.min.total.difference = round(hr.zones.min.total / duration.min.total * 100,1)
         ) %>% 
-        mutate(hr.z1.perc.total = round(hr.z1.min.total / duration.min.total * 100, 1),
+        mutate(hr.z0.perc.total = round(hr.z0.min.total / duration.min.total * 100, 1),
+               hr.z1.perc.total = round(hr.z1.min.total / duration.min.total * 100, 1),
                hr.z2.perc.total = round(hr.z2.min.total / duration.min.total * 100, 1),
                hr.z3.perc.total = round(hr.z3.min.total / duration.min.total * 100, 1),
                hr.z4.perc.total = round(hr.z4.min.total / duration.min.total * 100, 1),
-               hr.z5.perc.total = round(hr.z5.min.total / duration.min.total * 100, 1))
+               hr.z5.perc.total = round(hr.z5.min.total / duration.min.total * 100, 1),
+               hr.zones.perc.total = hr.z0.perc.total + hr.z1.perc.total + hr.z2.perc.total + hr.z3.perc.total + hr.z4.perc.total + hr.z5.perc.total) %>% 
+        rename(duration.min.total.withHR = duration.min.total)
+      
+      hr_summary_NOHR <- sport.period.activities %>%
+        # get activities without HR
+        filter(is.na(hrmax.activity)) %>% 
+        group_by(ath.id) %>%
+        summarise(duration.min.total.noHR = round(sum(duration.min, na.rm = T),1))
+      
+      hr_summary <- hr_summary %>% 
+        left_join(hr_summary_NOHR, by = "ath.id") %>% 
+        mutate(duration.min.total.noHR = ifelse(is.na(duration.min.total.noHR), 0, duration.min.total.noHR),
+               duration.min.total = duration.min.total.withHR + duration.min.total.noHR,
+               perc.total.withHR = round(duration.min.total.withHR / duration.min.total * 100,1)) %>% 
+        relocate(duration.min.total.noHR, duration.min.total, perc.total.withHR, .after=duration.min.total.withHR)
+      ###################################
+      
+      
       if (dim(hr_summary)[1] == 0) {
-        res[res$ath.id == i,paste0(t,".duration.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z1.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z2.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z3.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z4.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z5.min.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z1.perc.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z2.perc.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z3.perc.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z4.perc.total",period)] <- NA
-        res[res$ath.id == i,paste0(t,".hr.z5.perc.total",period)] <- NA
+        res[res$ath.id == i,paste0(t,".duration.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".duration.min.total.withHR.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".duration.min.total.noHR.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".perc.total.withHR.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z0.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z1.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z2.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z3.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z4.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z5.min.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z0.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z1.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z2.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z3.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z4.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.z5.perc.total.",period)] <- NA
+        res[res$ath.id == i,paste0(t,".hr.zones.perc.total.",period)] <- NA
+
       } else {
-        res[res$ath.id == i,paste0(t,".duration.min.total",period)] <- hr_summary$duration.min.total
-        res[res$ath.id == i,paste0(t,".hr.z1.min.total",period)] <- hr_summary$hr.z1.min.total
-        res[res$ath.id == i,paste0(t,".hr.z2.min.total",period)] <- hr_summary$hr.z2.min.total
-        res[res$ath.id == i,paste0(t,".hr.z3.min.total",period)] <- hr_summary$hr.z3.min.total
-        res[res$ath.id == i,paste0(t,".hr.z4.min.total",period)] <- hr_summary$hr.z4.min.total
-        res[res$ath.id == i,paste0(t,".hr.z5.min.total",period)] <- hr_summary$hr.z5.min.total
-        res[res$ath.id == i,paste0(t,".hr.z1.perc.total",period)] <- hr_summary$hr.z1.perc.total
-        res[res$ath.id == i,paste0(t,".hr.z2.perc.total",period)] <- hr_summary$hr.z2.perc.total
-        res[res$ath.id == i,paste0(t,".hr.z3.perc.total",period)] <- hr_summary$hr.z3.perc.total
-        res[res$ath.id == i,paste0(t,".hr.z4.perc.total",period)] <- hr_summary$hr.z4.perc.total
-        res[res$ath.id == i,paste0(t,".hr.z5.perc.total",period)] <- hr_summary$hr.z5.perc.total
+        res[res$ath.id == i,paste0(t,".duration.min.total.",period)] <- hr_summary$duration.min.total
+        res[res$ath.id == i,paste0(t,".duration.min.total.withHR.",period)] <- hr_summary$duration.min.total.withHR
+        res[res$ath.id == i,paste0(t,".duration.min.total.noHR.",period)] <- hr_summary$duration.min.total.noHR
+        res[res$ath.id == i,paste0(t,".perc.total.withHR.",period)] <- hr_summary$perc.total.withHR
+        res[res$ath.id == i,paste0(t,".hr.z0.min.total.",period)] <- hr_summary$hr.z0.min.total
+        res[res$ath.id == i,paste0(t,".hr.z1.min.total.",period)] <- hr_summary$hr.z1.min.total
+        res[res$ath.id == i,paste0(t,".hr.z2.min.total.",period)] <- hr_summary$hr.z2.min.total
+        res[res$ath.id == i,paste0(t,".hr.z3.min.total.",period)] <- hr_summary$hr.z3.min.total
+        res[res$ath.id == i,paste0(t,".hr.z4.min.total.",period)] <- hr_summary$hr.z4.min.total
+        res[res$ath.id == i,paste0(t,".hr.z5.min.total.",period)] <- hr_summary$hr.z5.min.total
+        res[res$ath.id == i,paste0(t,".hr.z0.perc.total.",period)] <- hr_summary$hr.z0.perc.total
+        res[res$ath.id == i,paste0(t,".hr.z1.perc.total.",period)] <- hr_summary$hr.z1.perc.total
+        res[res$ath.id == i,paste0(t,".hr.z2.perc.total.",period)] <- hr_summary$hr.z2.perc.total
+        res[res$ath.id == i,paste0(t,".hr.z3.perc.total.",period)] <- hr_summary$hr.z3.perc.total
+        res[res$ath.id == i,paste0(t,".hr.z4.perc.total.",period)] <- hr_summary$hr.z4.perc.total
+        res[res$ath.id == i,paste0(t,".hr.z5.perc.total.",period)] <- hr_summary$hr.z5.perc.total
+        res[res$ath.id == i,paste0(t,".hr.zones.perc.total.",period)] <- hr_summary$hr.zones.perc.total
       }
       #### HR END
       # total sessions
@@ -735,6 +788,8 @@ for (i in ath.info.test$ath.id) {
         # res[res$ath.id == i,paste0(t,".lutrimp_goldvt.wkavg.",period)] <- 
         #   round(res[res$ath.id == i,paste0(t,".lutrimp_goldvt.total.",period)]/(days/7),1)
       }
+      
+      ################################
       # monotony
       if (period == "prevweek"){
         res[res$ath.id == i,paste0(t,".etrimp.monotony.",period)] <- sport.period.activities %>%
@@ -748,12 +803,22 @@ for (i in ath.info.test$ath.id) {
         wk_monot.etrimp <- NULL
         # wk_monot.lutrimp <- NULL
         # wk_monot.lutrimp_goldvt <- NULL
+
         for (wk in seq_len(days/7)){
           # loop through weeks
-          wk_monot.etrimp <- c(wk_monot.etrimp, ath.activities %>%
-                                 filter(as.Date(as.character(date),"%Y%m%d") < (t.date - (7*(wk-1))),
-                                        as.Date(as.character(date),"%Y%m%d") >= (t.date - (7*wk))) %>%
-                                 summarise(m=round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),2)) %>% as.numeric())
+          # change loop as we need now before and after the test! (SRC UPDATE FEB 2023)
+          if (grepl("next", period)){ # next periods
+            wk_monot.etrimp <- c(wk_monot.etrimp, ath.activities %>%
+                                   filter(as.Date(as.character(date),"%Y%m%d") > (t.date + (7*(wk-1))),
+                                          as.Date(as.character(date),"%Y%m%d") <= (t.date + (7*wk))) %>%
+                                   summarise(m=round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),2)) %>% as.numeric())
+          } else { # previous periods
+            wk_monot.etrimp <- c(wk_monot.etrimp, ath.activities %>%
+                                   filter(as.Date(as.character(date),"%Y%m%d") < (t.date - (7*(wk-1))),
+                                          as.Date(as.character(date),"%Y%m%d") >= (t.date - (7*wk))) %>%
+                                   summarise(m=round(sum(etrimp,na.rm=T)/7/sd(etrimp,na.rm=T),2)) %>% as.numeric())
+          }
+          ##### remove lutrimp below
           # wk_monot.lutrimp <- c(wk_monot.lutrimp, ath.activities %>%
           #                         filter(as.Date(as.character(date),"%Y%m%d") < (t.date - (7*(wk-1))),
           #                                as.Date(as.character(date),"%Y%m%d") >= (t.date - (7*wk))) %>%
@@ -780,11 +845,21 @@ for (i in ath.info.test$ath.id) {
         } else {
           sp="other"
         }
+        
         # get all activities for the sport and the period
-        sport.period.activities <- ath.activities %>%
-          filter(sport_type == sport) %>%
-          filter(as.Date(as.character(date),"%Y%m%d") < t.date,
-                 as.Date(as.character(date),"%Y%m%d") >= t.date - days)
+        # choose if next or previous
+        if(grepl("next", period)){
+          sport.period.activities <- ath.activities %>% 
+            filter(sport_type == sport) %>%
+            filter(as.Date(as.character(date),"%Y%m%d") > t.date,
+                   as.Date(as.character(date),"%Y%m%d") <= t.date + days)
+        } else {
+          # get all activities for the the period
+          sport.period.activities <- ath.activities %>% 
+            filter(as.Date(as.character(date),"%Y%m%d") < t.date,
+                   as.Date(as.character(date),"%Y%m%d") >= t.date - days)
+        }
+        
         if (dim(sport.period.activities)[1] == 0) {
           # go to next sport
           res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- 0
