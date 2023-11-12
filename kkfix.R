@@ -456,7 +456,8 @@ for (i in ath.info.test$ath.id) {
         filter(!is.na(hrmax.activity)) %>%
         group_by(ath.id) %>% 
         # filter(ath.id == "CMR_010") %>% 
-        summarise(duration.min.total = sum(duration.min, na.rm = T),
+        summarise(.groups = "drop",
+                  duration.min.total = sum(duration.min, na.rm = T),
                   hr.z0.min.total = sum(hr.z0.time, na.rm = T),
                   hr.z1.min.total = sum(hr.z1.time, na.rm = T),
                   hr.z2.min.total = sum(hr.z2.time, na.rm = T),
@@ -479,7 +480,8 @@ for (i in ath.info.test$ath.id) {
         # get activities without HR
         filter(is.na(hrmax.activity)) %>% 
         group_by(ath.id) %>%
-        summarise(duration.min.total.noHR = round(sum(duration.min, na.rm = T),1))
+        summarise(.groups = "drop",
+                  duration.min.total.noHR = round(sum(duration.min, na.rm = T),1))
       
       hr_summary <- hr_summary %>% 
         left_join(hr_summary_NOHR, by = "ath.id") %>% 
@@ -601,18 +603,45 @@ for (i in ath.info.test$ath.id) {
                                                                                      # sd(wk_monot.lutrimp_goldvt,na.rm=T),2)
       } # end monotony calculation
       # sessions per sport
-      for (sport in unique(ath.activities$sport_type)) {
-        # to name variable
-        if (sport == "Running") {
-          sp="run"
-        } else if (sport == "Cycling") {
-          sp="bike"
-        } else {
-          sp="other"
-        }
-        
+     ## sport_sessions = NULL
+     ## for (sport in unique(ath.activities$sport_type)) {
+     ##   # to name variable
+     ##   if (sport == "Running") {
+     ##     sp="run"
+     ##   } else if (sport == "Cycling") {
+     ##     sp="bike"
+     ##   } else {
+     ##     sp="other"
+     ##   }
+     ##   sport_sessions <- c(sport_sessions, sp)
+     ##}
+      #for (sp in unique(sport_sessions)[order(match(unique(sport_sessions), c("bike", "run")))]){
+      for (sp in c("bike", "run", "other")){
+          # to name variable
+          if (sp == "run") {
+            sport = "Running"                   
+          } else if (sp == "bike") {
+            sport = "Cycling"
+          } else {
+            sport = "Other"
+          }           
         # get all activities for the sport and the period
         # choose if next or previous
+      if (sp == "other"){
+          if(grepl("next", period)){
+              sport.period.activities <- ath.activities %>%
+                  filter(! sport_type %in% c("Running", "Cycling")) %>%
+                  filter(as.Date(as.character(date),"%Y%m%d") > t.date,
+                         as.Date(as.character(date),"%Y%m%d") <= t.date + days)
+                   
+          } else {
+              # get all activities for the the period
+              sport.period.activities <- ath.activities %>%
+                  filter(! sport_type %in% c("Running", "Cycling")) %>%
+                  filter(as.Date(as.character(date),"%Y%m%d") < t.date,
+                         as.Date(as.character(date),"%Y%m%d") >= t.date - days)
+          }
+      } else {
         if(grepl("next", period)){
           sport.period.activities <- ath.activities %>% 
             filter(sport_type == sport) %>%
@@ -625,7 +654,7 @@ for (i in ath.info.test$ath.id) {
             filter(as.Date(as.character(date),"%Y%m%d") < t.date,
                    as.Date(as.character(date),"%Y%m%d") >= t.date - days)
         }
-        
+      }
         if (dim(sport.period.activities)[1] == 0) {
           # go to next sport
           res[res$ath.id == i,paste0(t,".",sp,".sessions.total.",period)] <- 0

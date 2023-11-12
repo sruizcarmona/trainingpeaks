@@ -856,6 +856,7 @@ for (i in ath.info.test$ath.id) {
         } else {
           # get all activities for the the period
           sport.period.activities <- ath.activities %>% 
+            filter(sport_type == sport) %>%
             filter(as.Date(as.character(date),"%Y%m%d") < t.date,
                    as.Date(as.character(date),"%Y%m%d") >= t.date - days)
         }
