@@ -220,12 +220,42 @@ update.ath_info_with_newzones <- function(ath.info, athlete, maxHR) {
   #                         file=character(), #debug
   #                         stringsAsFactors=FALSE) 
   start <- Sys.time()
-  hr_vs_all <- foreach (file=files,.combine=rbind,
-                        .packages=c("dplyr", "fit","stringr","zoo","splines", "xml2", "XML", "tidyr", "geosphere"),
-                        .export=c("get.hr_vs_all","smooth.data","get.date_GARMIN", ls(globalenv()))) %dopar% {
-    temp <- get.hr_vs_all(file, maxHR)
-    temp
-  }
+## NEW LOOP
+#hr_vs_all <- NULL
+#for (f in files) {
+#    istart <- Sys.time()
+#    temp <- get.hr_vs_all(f, maxHR)
+#    hr_vs_all <- rbind(hr_vs_all, temp)
+#        
+#    if(which(f == files) %% 10 == 0) {
+#    print(paste0(which(f==files)," file, runtime: ", round(difftime(Sys.time(), start, units = "mins"),2)))
+#    }
+#}
+
+####NEWLOOP2
+ # create files
+for (i in seq(1, length(files), 10)) {
+     print(paste0(i, "/", length(files)))
+     system.time(hr_vs_all <- do.call(rbind, lapply(files[i:min(i+9, length(files))], get.hr_vs_all, maxHR=maxHR)))
+     saveRDS(hr_vs_all, paste0("tempfiles/tmp_", i, ".rds"))
+     hr_vs_all <- NULL
+     gc()
+     print(round(difftime(Sys.time(), start, units = "mins"),2))
+}
+#read files
+hr_vs_all <- NULL
+for (i in seq(1, length(files), 10)) {
+      myfile <- paste0("tempfiles/tmp_", i, ".rds")
+      hr_vs_all <- rbind(hr_vs_all, readRDS(myfile))
+      file.remove(myfile)
+}
+
+#  hr_vs_all <- foreach (file=files,.combine=rbind,
+#                        .packages=c("dplyr", "fit","stringr","zoo","splines", "xml2", "XML", "tidyr", "geosphere"),
+#                        .export=c("get.hr_vs_all","smooth.data","get.date_GARMIN", ls(globalenv()))) %do% {
+#    temp <- get.hr_vs_all(file, maxHR)
+#    temp
+#  }
   rownames(hr_vs_all) <- NULL
   end <- Sys.time()
   duration <- end - start

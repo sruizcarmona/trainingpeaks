@@ -140,16 +140,17 @@ if(file.exists('out/rdas/tpeaks_newzones_cmr.rda')){
 # initialize cluster
 ###################
 # set up number of cores
-cores <- detectCores()
+#cores <- detectCores()
 #cl <- makeCluster(cores[1]-1) #not to overload your computer
-cl <- makeCluster(16) #not to overload your computer
-registerDoParallel(cl)
+#cl <- makeCluster(32) #not to overload your computer
+#registerDoParallel(cl)
 
 writeLines(c("###############################",
              "##   TRAININGPEAKS PROJECT   ##",
              "###############################"))
 for (athlete in sel.athletes){
-  writeLines(c("","###############################",
+  writeLines(c("",
+               paste0("###############################", Sys.time()), 
                "Calculating maxHR and HR/Power/Speed correlations...",
                paste0("Working with athlete ",athlete),""))
   
@@ -218,10 +219,11 @@ for (athlete in sel.athletes){
   #   tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
   # }
   tp.newzones <- tp.newzones %>% select(-contains(c("thld","cor")))
-  # save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
+  save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
+  quit(status=1)
 }
 # stop cluster
-stopCluster(cl)
+#stopCluster(cl)
 # save everything in a file, so we don't need to calculate them every time
 save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
 tp.newzones
@@ -233,10 +235,10 @@ tpeaks.all <- NULL
 # initialize cluster
 ###################
 # set up number of cores
-cores <- detectCores()
+#cores <- detectCores()
 #cl <- makeCluster(cores[1]-1) #not to overload your computer
-cl <- makeCluster(16) #not to overload your computer
-registerDoParallel(cl)
+#cl <- makeCluster(32) #not to overload your computer
+#registerDoParallel(cl)
 
 for (athlete in sel.athletes){
   writeLines(c("","###############################",
@@ -265,12 +267,13 @@ for (athlete in sel.athletes){
   print(duration)
   tpeaks.all <- rbind(tpeaks.all,tp.athlete)
   rownames(tpeaks.all) <- NULL
+    saveRDS(tpeaks.all,paste0('tempfiles/tpeaks_all_',athlete,'.rds'))
 }
 # stop cluster
-stopCluster(cl)
+#stopCluster(cl)
 
 # save everything in a file, so we don't need to calculate them every time
-# save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
+save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
 # tpeaks.all
 
 
