@@ -83,22 +83,21 @@ source('src/f_gettcxactivity.R') # functions for reading tcx files
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
 
-ath.testdates <- readr::read_csv('../../2311_TRAININGPEAKS/alpecin_tpeaks_2311.csv',
+ath.testdates <- readr::read_csv('../../2504_UPDATE/athlete_dates_2504.csv',
                                    col_types = cols("c",
                                                     col_date(format="%d/%m/%Y")))
 sel.athletes <- ath.testdates$ATHLETE
-# sel.athletes <- c(sel.athletes, ath.testdates2$ATHLETE, ath.testdates3$ATHLETE)
 
 
 # all folders in PRO_HEART, where sel.athletes folders are located
-all.dirs.PH <- list.dirs('../../2311_TRAININGPEAKS/',recursive = F)
+all.dirs.PH <- list.dirs('../../2504_UPDATE/',recursive = F)
 ```
 
 ### Load previous results
 
 ```{r}
-if(file.exists('out/rdas/tpeaks_newzones_cmr.rda')){
-  load('out/rdas/tpeaks_newzones_cmr.rda')
+if(file.exists('out/rdas/tpeaks_newzones_cmr2504.rda')){
+  load('out/rdas/tpeaks_newzones_cmr2504.rda')
 }
 ```
 
@@ -221,11 +220,18 @@ for (athlete in sel.athletes){
                "Calculating maxHR and HR/Power/Speed correlations...",
                paste0("Working with athlete ",athlete),""))
   
+  ## check if there are files, if not, skip
+  files <- get_list_files(athlete)
+  if (length(files) == 0){
+    writeLines(c("No files found, skipping athlete."))
+    next
+  }
+  
   # check if we already have the info
   if(!exists("tp.newzones")){
     writeLines(c("Nothing loaded or previously computed...",
                  "Running everything for the first time."))
-    tp.newzones <- data.frame(name=athlete, ath.id=paste0("CMR_",str_pad(1,3,pad="0")),
+    tp.newzones <- data.frame(name=athlete, ath.id=paste0("TP25_",str_pad(1,3,pad="0")),
                               maxHR= NA, stringsAsFactors=FALSE)
     writeLines(c(paste0("Athlete ", athlete,
                           ", assigned code: ",
@@ -235,7 +241,7 @@ for (athlete in sel.athletes){
     if(!athlete %in% tp.newzones$name){
       writeLines(c("Unknown athlete, creating a new entry."))
       tp.newzones[nrow(tp.newzones)+1,'name'] <- athlete
-      tp.newzones$ath.id[tp.newzones$name == athlete] <- paste0("CMR_",str_pad(dim(tp.newzones)[1],3,pad="0"))
+      tp.newzones$ath.id[tp.newzones$name == athlete] <- paste0("TP25_",str_pad(dim(tp.newzones)[1],3,pad="0"))
       writeLines(c(paste0("Athlete ", athlete, ", assigned code: ",
                           tp.newzones$ath.id[tp.newzones$name == athlete])))
     } else if (!is.na(tp.newzones$maxHR[tp.newzones$name == athlete])) {
@@ -252,6 +258,7 @@ for (athlete in sel.athletes){
       writeLines(paste0("Calculating zones..."))
     }
   }
+  
   ### SRC COMMENT NEXT SECTION AS TANGENT METHOD DOESNT NEED LAB MAXHR
   ### SET IT TO 190 TO HAVE A MINIMUM TO SMOOTH TO REMOVE SPIKES
   # you should be here if the athlete has not been processed, with a new row in the table
@@ -286,13 +293,21 @@ for (athlete in sel.athletes){
   #   tp.newzones$gold.vt2[tp.newzones$name == athlete] <- NA
   # }
   tp.newzones <- tp.newzones %>% select(-contains(c("thld","cor")))
-  # save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
+  save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr2504.rda')
 }
 # stop cluster
 stopCluster(cl)
 # save everything in a file, so we don't need to calculate them every time
-save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr.rda')
-tp.newzones
+save(tp.newzones,file='out/rdas/tpeaks_newzones_cmr2504.rda')
+# tp.newzones %>% arrange(name)
+# ath.testdates %>% arrange(ATHLETE)
+
+## Get only the XXX smallest files, for calculating the maxHR
+# files <- file.info(get_list_files(athlete)) %>%
+#   arrange(size) %>%
+#   select(size) %>%
+#   slice_head(n = 300) %>%
+#   rownames()
 ```
 
 ***
@@ -313,12 +328,14 @@ There are different checks to be sure that the activity is processed and saved c
 
 ```{r}
 tpeaks.all <- NULL
+tpeaks.all <- readRDS("tempfiles/tpeaks_all_1179_2024.rds")
 ###################
 # initialize cluster
 ###################
 # set up number of cores
 cores <- detectCores()
-cl <- makeCluster(cores[1]-1) #not to overload your computer
+# cl <- makeCluster(cores[1]-1) #not to overload your computer
+cl <- makeCluster(2) #not to overload your computer
 registerDoParallel(cl)
 
 for (athlete in sel.athletes){
@@ -326,6 +343,28 @@ for (athlete in sel.athletes){
                "Processing all fit files...",
                paste0("Working with athlete ", athlete,
                       " (", tp.newzones$ath.id[tp.newzones$name == athlete], ")"), ""))
+  
+  ## check if there are files, if not, skip
+  files <- get_list_files(athlete)
+  if (length(files) == 0){
+    writeLines(c("No files found, skipping athlete."))
+    next
+  }
+  
+  # check if athlete already processed
+  if (file.exists(paste0('tempfiles/tpeaks_all_',athlete,'.rds'))){
+    writeLines(paste0("Athlete ", athlete, " already processed, skipping..."))
+    # tpeaks.all <- rbind(tpeaks.all,
+    #                     readRDS(paste0('tempfiles/tpeaks_all_',athlete,'.rds')))
+    next
+  } else if (athlete %in% tp.newzones$name && tp.newzones$maxHR[tp.newzones$name == athlete] == 999){
+    writeLines(paste0("Athlete ", athlete, " has been marked for manual processing, skipping..."))
+    next
+  } else {
+    writeLines(paste0("Athlete ", athlete, " not processed yet, calculating..."))
+  }
+  
+  
   
   # edit 211020, check all folders, not just the first one!
   # sel.dirs.tmp <- all.dirs.PH[str_detect(all.dirs.PH, paste0("/",athlete, "$"))]
@@ -348,13 +387,20 @@ for (athlete in sel.athletes){
   print(duration)
   tpeaks.all <- rbind(tpeaks.all,tp.athlete)
   rownames(tpeaks.all) <- NULL
+  saveRDS(tpeaks.all,paste0('tempfiles/tpeaks_all_',athlete,'.rds'))
 }
 # stop cluster
 stopCluster(cl)
 
 # save everything in a file, so we don't need to calculate them every time
-# save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
-# tpeaks.all
+tpeaks.all <- tpeaks.all %>% unique()
+save(tpeaks.all,file=paste0('out/rdas/tpeaks_all_',format(as.Date(Sys.Date()),format="%y%m%d"),'.rda'))
+
+tpeaks.all$ath.id %>% unique()
+## for once it's finished
+# rda_file <- tail(list.files('out/rdas/', pattern="tpeaks_all_*", recursive=T, full.names=T), 1)
+# writeLines(paste0("Using most recent rda file: ", rda_file))
+# load(file=rda_file)
 ```
 
 ***
@@ -448,10 +494,12 @@ cohort_vs_athlete <- str_split(str_remove(all.dirs.PH,".*TRAININGPEAKS/"),"/")
 cohort_vs_athlete <- as.data.frame(t(do.call("cbind",
                                              lapply(cohort_vs_athlete,function(x){x[(length(x)-1):length(x)]}))))
 cohort_vs_athlete <- cohort_vs_athlete %>% 
-  filter(V2 != "rawzip") %>% 
+  filter(V2 != "zips") %>% 
   # mutate(V1 = ifelse(V1==V2,'P@H',V1)) %>% 
   arrange(V1) %>% 
   distinct(V2, .keep_all = T)
+
+# cohort_vs_athlete$V1 <- "TP2504"
 
 ath.info <- merge(merge(tp.newzones, cohort_vs_athlete,by.x="name",by.y="V2") %>% select(name,ath.id,cohort=V1),
                   all.activities %>%
@@ -505,7 +553,8 @@ add new calculations for test dates
 ath.info.test <- merge(ath.full.info, ath.testdates, by.x = "name", by.y = "ATHLETE" , all = T) %>% 
   relocate(name,.after=ath.id) %>% 
   arrange(ath.id) %>% 
-  rename(test_date_1 = TEST_DATE)
+  rename(test_date_1 = TEST_DATE) %>% 
+  filter(!is.na(ath.id))
 ```
 
 
@@ -555,7 +604,7 @@ res <- ath.info.test
 # 
 # res <- ath.info.test %>% 
 #   select(ath.id,name,total_activities, test_date_1,test_date_2)
-# res
+res
 ```
 
 

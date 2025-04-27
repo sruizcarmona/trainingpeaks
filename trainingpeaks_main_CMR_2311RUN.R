@@ -27,7 +27,7 @@ source('src/f_gettcxactivity.R') # functions for reading tcx files
 # DECLARE NAME OF ATHLETES TO ANALYZE
 # sel.athletes <- c("NAME")
 
-ath.testdates <- readr::read_csv('../../2311_TRAININGPEAKS/alpecin_tpeaks_2311.csv',
+ath.testdates <- readr::read_csv('../../2311_TRAININGPEAKS/XXX_tpeaks_2311.csv',
                                    col_types = cols("c",
                                                     col_date(format="%d/%m/%Y")))
 sel.athletes <- ath.testdates$ATHLETE
